@@ -1,6 +1,35 @@
-# 02 — Second Brain Casalingo (Versione Domestica Semplice)
+# 02 — Second Brain Casalingo (Versione Semplificata)
 
-> Guida passo passo per installare una versione **semplificata** del progetto BrainOS descritto nella repository, pensata per un utilizzo puramente domestico: un solo utente, nessun accesso da Internet, nessun dominio, nessuna alta disponibilità, nessun clustering.
+> Questa guida è la **versione semplificata** di `Claude-02.md` (File 03 — Guida Completa all'Implementazione). Copre solo le Fasi necessarie per un uso puramente domestico: un solo utente, accesso solo da rete locale, nessuna VPN, nessun reverse proxy, nessun database applicativo/vettoriale (ancora).
+>
+> **Punto fondamentale:** questa guida usa **esattamente gli stessi path, gli stessi nomi dei container e la stessa numerazione delle Fasi** della guida completa. Non è una guida "diversa e più semplice" — è la guida completa con alcune Fasi saltate. Questo significa che il giorno in cui vorrai passare a `Claude-02.md` per aggiungere VPN, database, reverse proxy o ricerca semantica, **non dovrai spostare file, rinominare cartelle o rifare nulla**: basta riprendere dalla Fase successiva a quella in cui questa guida si ferma.
+
+---
+
+## Cosa include questa guida rispetto a Claude-02
+
+| Fase | Titolo | In questa guida (01) | In Claude-02 (versione completa) |
+|---|---|---|---|
+| 0 | Pianificazione | ✅ Semplificata | ✅ Completa |
+| 1 | Installazione sistema operativo | ✅ Uguale | ✅ Uguale |
+| 2 | Accesso remoto SSH | ✅ Opzionale, comandi uguali | ✅ Uguale |
+| 3 | Configurazione storage (`/data`) | ✅ Uguale | ✅ Uguale |
+| 4 | Docker e Docker Compose | ✅ Uguale | ✅ Uguale |
+| 5 | Rete locale / DNS | ✅ Solo riserva DHCP | ✅ Anche DNS locale (Technitium) |
+| 6 | Struttura cartelle del Brain | ✅ Uguale (tutte le 14 cartelle) | ✅ Uguale |
+| 7 | Database applicativo (Postgres) | ⏭️ Saltata | ✅ Presente |
+| 8 | Database vettoriale (ChromaDB) | ⏭️ Saltata | ✅ Presente |
+| 9 | AI locale (Ollama) | ✅ Uguale | ✅ Uguale |
+| 10 | Interfaccia AI (Open WebUI) | ✅ Uguale | ✅ Uguale |
+| 11 | Vault Obsidian | ✅ Versione locale semplice | ✅ Anche sync multi-dispositivo via Git |
+| 12 | VPN (accesso da fuori casa) | ⏭️ Saltata | ✅ Presente |
+| 13 | Reverse proxy | ⏭️ Saltata | ✅ Presente (opzionale anche lì) |
+| 14 | Test end-to-end | ✅ Versione ridotta | ✅ Completa |
+| 15 | Backup | ✅ Uguale | ✅ Uguale |
+| 16 | Manutenzione | ✅ Cenni | ✅ Completa |
+| 17 | Automazioni future | ✅ Cenni | ✅ Completa |
+
+Le Fasi 7, 8, 12 e 13, quando vorrai attivarle, si trovano già pronte e invariate in `Claude-02.md`: puoi copiare i comandi da lì senza dover adattare nulla, perché i path (`/data/brain/...`, `/data/docker/...`) e i nomi dei container (`brainos-*`) sono identici.
 
 ---
 
@@ -9,80 +38,244 @@
 | Requisito | Valore |
 |---|---|
 | Utenti | Uno solo (tu) |
-| Accesso da Internet | ❌ Nessuno |
+| Accesso da Internet | ❌ Nessuno (per ora — si aggiunge in Claude-02, Fase 12) |
 | Dominio pubblico | ❌ Nessuno |
-| Cloud | ❌ Nessuno |
-| Alta disponibilità / clustering | ❌ Nessuno |
+| Database applicativo/vettoriale | ❌ Non ancora (si aggiunge in Claude-02, Fasi 7-8) |
 | Accesso dal PC principale | ✅ Sì |
-| Accesso dagli altri PC di casa (LAN) | ✅ Sì |
-| Accesso dal telefono via WiFi locale | ✅ Sì |
-| Accesso da fuori casa | ❌ Non richiesto in questa versione |
-
-Questa versione **riprende i concetti della repository** (Obsidian + Vault + Docker + AI locale/cloud) ma **rimuove tutta la complessità enterprise**: niente VPN per l'esterno, niente reverse proxy con HTTPS pubblico, niente autenticazione avanzata, niente Gitea/Nextcloud/Immich/Grafana/Prometheus a meno che tu non li voglia in un secondo momento.
+| Accesso dagli altri PC/telefoni di casa (LAN) | ✅ Sì |
 
 ---
 
-## Indice
+## Indice delle fasi
 
-1. Hardware minimo
-2. Software necessario
-3. Installazione completa (passo passo)
-4. Configurazione della rete locale
-5. Struttura delle cartelle
-6. Docker Compose per i servizi
-7. AI locali e modelli consigliati
-8. Configurazione semplice del Brain
-9. Backup
-10. Aggiornamenti
-11. Errori comuni
-12. Checklist finale
-
----
-
-## 1. Hardware minimo
-
-Per questo scenario domestico (un solo utente, nessun bisogno di alta disponibilità) l'hardware richiesto è molto più contenuto di quanto descritto per lo scenario "enterprise" della repository.
-
-| Componente | Minimo | Consigliato |
-|---|---|---|
-| CPU | 4 core | 4-6 core |
-| RAM | 8 GB | 16 GB |
-| Storage | 128 GB SSD | 256-512 GB SSD (o SSD esterno da 1 TB) |
-| GPU | Non necessaria | NVIDIA con 8+ GB VRAM se vuoi AI locale più veloce |
-| Rete | Wi-Fi/Ethernet di casa | Ethernet (più stabile per un "server sempre acceso") |
-
-> 💡 Nota: se hai già un PC principale potente che usi anche per altro, puoi installare tutto direttamente lì (come richiesto in questo scenario), senza bisogno di un secondo PC dedicato.
-
----
-
-## 2. Software necessario
-
-| Software | A cosa serve |
+| Fase | Titolo |
 |---|---|
-| Sistema operativo (Windows, macOS o Linux) | Il PC principale di casa dove installerai tutto |
-| Docker Desktop (Windows/macOS) o Docker Engine (Linux) | Per far girare i servizi in container |
-| Obsidian | Editor per il tuo vault Markdown |
-| Ollama | Per far girare modelli AI in locale |
-| Git (opzionale ma consigliato) | Per il versionamento del Brain |
+| 0 | Pianificazione e scelte preliminari |
+| 1 | Installazione del sistema operativo |
+| 2 | Accesso remoto (SSH) — opzionale |
+| 3 | Configurazione dello storage |
+| 4 | Installazione di Docker e Docker Compose |
+| 5 | Rete locale e nome host |
+| 6 | Struttura delle cartelle del Brain |
+| 9 | AI locale con Ollama |
+| 10 | Interfaccia AI (Open WebUI) |
+| 11 | Vault Obsidian (versione locale) |
+| 14 | Test end-to-end (versione ridotta) |
+| 15 | Backup |
+
+> Nota: i numeri delle Fasi 7, 8, 12, 13, 16, 17 non compaiono in questa guida di proposito — sono riservati alle sezioni corrispondenti di `Claude-02.md`, per mantenere la numerazione identica tra le due guide.
 
 ---
 
-## 3. Installazione completa (passo passo)
+## Fase 0 — Pianificazione e scelte preliminari
 
-### Passo 1 — Verifica i requisiti del PC
+### Obiettivo
+Definire con chiarezza cosa si sta costruendo, in versione domestica minima.
 
-1.1. Controlla che il PC abbia almeno 8 GB di RAM libera e almeno 20 GB di spazio disco libero.
+### Cosa fare
+1. Decidi quale macchina userai: può essere il tuo PC principale (usato anche per altro) oppure un PC/mini PC dedicato, sempre acceso.
+2. Prepara una chiavetta USB da almeno 8 GB per l'immagine di installazione, **solo se** installerai Ubuntu Server da zero. Se il PC ha già un sistema operativo che vuoi tenere, vedi la nota nella Fase 1.
+3. Scarica l'immagine ISO di **Ubuntu Server 24.04 LTS** da `ubuntu.com/download/server`.
 
-1.2. Se vuoi usare l'AI in locale con modelli più grandi (7B+), verifica di avere almeno 16 GB di RAM totali.
+### Comandi
+Nessun comando in questa fase: è puramente decisionale.
 
-### Passo 2 — Installa Docker
+### Configurazione
+Annota, prima di iniziare:
+- Nome host del PC (es. `brainos-server`)
+- Nome utente amministratore
+- Se userai un disco esterno per i dati (consigliato, vedi Fase 3) o solo il disco interno
 
-2.1. Se usi **Windows**: scarica e installa **Docker Desktop** da `docker.com`, assicurandoti che il backend WSL2 sia abilitato.
+### Verifica
+- [ ] Hai deciso quale PC userai
+- [ ] Hai l'immagine ISO scaricata (se necessaria)
 
-2.2. Se usi **macOS**: scarica e installa **Docker Desktop** per Mac.
+### Problemi comuni
+| Problema | Causa |
+|---|---|
+| Non sai quale versione di Ubuntu scaricare | Usa sempre la versione LTS più recente |
 
-2.3. Se usi **Linux (Ubuntu/Debian)**, esegui da terminale:
+### Come risolverli
+Scarica esclusivamente da `ubuntu.com`, versione "Server" (non "Desktop").
 
+### Cosa fare dopo
+Procedi alla Fase 1.
+
+---
+
+## Fase 1 — Installazione del sistema operativo
+
+### Obiettivo
+Avere Ubuntu funzionante sul PC scelto.
+
+### Cosa fare
+1. Se stai installando da zero: scrivi l'ISO sulla chiavetta USB (Balena Etcher / Rufus su Windows, `dd` su Linux/macOS) e avvia il PC da USB.
+2. Segui la procedura guidata: lingua, tastiera, rete (DHCP automatico va bene), disco, utente amministratore, nome host.
+3. Nella schermata "Featured Server Snaps", abilita **OpenSSH Server** (utile anche solo per comodità, vedi Fase 2).
+4. Completa l'installazione e riavvia.
+
+> 💡 **Alternativa più semplice**: se preferisci non reinstallare il sistema operativo, puoi seguire questa guida anche su un PC con **Ubuntu Desktop, Windows o macOS** già installato, usando direttamente Docker Desktop invece di Docker Engine. In tal caso i comandi restano quasi identici, ma alcuni passaggi (es. `systemctl`, installazione via `apt`) non si applicano — usa l'interfaccia grafica di Docker Desktop al loro posto. Per la massima compatibilità futura con `Claude-02.md` (pensata per Ubuntu Server), l'opzione consigliata resta comunque Ubuntu.
+
+### Comandi
+```bash
+# Scrittura ISO su USB da terminale Linux/macOS (sostituisci /dev/sdX con il device corretto)
+sudo dd if=ubuntu-24.04-live-server-amd64.iso of=/dev/sdX bs=4M status=progress oflag=sync
+```
+
+> ⚠️ Presta **estrema attenzione** al device di destinazione: un errore può cancellare dati da un altro disco.
+
+### Configurazione
+- Nome host: es. `brainos-server`
+- Nome utente: a tua scelta
+- OpenSSH Server: consigliato attivo
+
+### Verifica
+Al riavvio, prompt di login testuale con il nome host scelto.
+
+### Problemi comuni
+| Problema | Causa probabile |
+|---|---|
+| Il PC non avvia dalla chiavetta USB | Ordine di boot nel BIOS/UEFI non corretto, o Secure Boot attivo |
+
+### Come risolverli
+Entra nel BIOS/UEFI (F2/Del all'accensione), imposta l'avvio da USB come priorità, disabilita temporaneamente Secure Boot se necessario.
+
+### Cosa fare dopo
+Procedi alla Fase 2 (opzionale) o direttamente alla Fase 3.
+
+---
+
+## Fase 2 — Accesso remoto (SSH) — opzionale
+
+### Obiettivo
+Poter amministrare il PC da un altro dispositivo senza monitor/tastiera collegati. Utile ma non obbligatorio se lavori sempre direttamente sul PC.
+
+### Cosa fare
+1. Trova l'IP del PC.
+2. Connettiti via SSH da un altro dispositivo della rete.
+
+### Comandi
+Sul PC, per vedere l'IP:
+```bash
+ip addr show
+```
+
+Da un altro PC:
+```bash
+ssh brainadmin@192.168.1.50
+```
+
+### Configurazione
+Alias comodo su `~/.ssh/config` (Linux/macOS):
+```text
+Host brainos
+    HostName 192.168.1.50
+    User brainadmin
+```
+Poi: `ssh brainos`
+
+### Verifica
+Dopo la connessione, vedi il prompt del PC (es. `brainadmin@brainos-server:~$`).
+
+### Problemi comuni
+| Problema | Causa |
+|---|---|
+| `Connection refused` | Servizio SSH non attivo |
+| `Connection timed out` | Firewall blocca la porta 22, o IP errato |
+
+### Come risolverli
+```bash
+sudo systemctl status ssh
+sudo systemctl enable --now ssh
+sudo ufw allow OpenSSH
+```
+
+### Cosa fare dopo
+Procedi alla Fase 3.
+
+---
+
+## Fase 3 — Configurazione dello storage
+
+### Obiettivo
+Separare **sistema** e **dati**, così da poter reinstallare il sistema operativo in futuro senza perdere il Brain. Stessa identica struttura di `Claude-02.md`.
+
+### Cosa fare
+1. Collega un SSD esterno USB (o un secondo disco interno).
+2. Identificalo, formattalo e montalo in modo persistente usando l'UUID.
+
+### Comandi
+```bash
+# Elenca tutti i dischi collegati
+lsblk
+
+# Supponendo che il nuovo disco sia /dev/sdb, crea una partizione
+sudo fdisk /dev/sdb
+# All'interno di fdisk: n -> invio per i default -> w
+
+# Formatta in ext4
+sudo mkfs.ext4 /dev/sdb1
+
+# Crea il punto di mount
+sudo mkdir -p /data
+
+# Trova l'UUID
+sudo blkid /dev/sdb1
+```
+
+### Configurazione
+Apri `/etc/fstab`:
+```bash
+sudo nano /etc/fstab
+```
+Aggiungi (sostituendo `UUID-DEL-TUO-DISCO`):
+```text
+UUID=UUID-DEL-TUO-DISCO   /data   ext4   defaults   0   2
+```
+Monta subito senza riavviare:
+```bash
+sudo mount -a
+```
+
+Crea la struttura dati (**identica a Claude-02**, incluse le cartelle che per ora resteranno vuote — `vectors` e `database` verranno usate quando attiverai le Fasi 7-8):
+```bash
+sudo mkdir -p /data/brain/vault /data/brain/vectors /data/brain/database /data/brain/cache
+sudo mkdir -p /data/git /data/backups /data/docker
+sudo chown -R $USER:$USER /data
+```
+
+### Verifica
+```bash
+df -h /data
+ls -la /data
+```
+Dovresti vedere le cartelle `brain`, `git`, `backups`, `docker`.
+
+### Problemi comuni
+| Problema | Causa |
+|---|---|
+| Il sistema non si avvia dopo aver modificato `fstab` | Errore di sintassi o UUID sbagliato |
+| `mount -a` restituisce errore | UUID errato o filesystem non corrispondente |
+
+### Come risolverli
+Se il sistema non si avvia, usa la shell di emergenza offerta da Ubuntu (Ctrl+D o modalità recovery) e correggi `/etc/fstab`.
+
+> 💡 Testa sempre con `sudo mount -a` prima di riavviare dopo una modifica a `fstab`.
+
+### Cosa fare dopo
+Procedi alla Fase 4.
+
+---
+
+## Fase 4 — Installazione di Docker e Docker Compose
+
+### Obiettivo
+Installare il motore che ospiterà i servizi in container.
+
+### Cosa fare
+Installa Docker Engine e il plugin Docker Compose (procedura ufficiale Ubuntu — identica a Claude-02).
+
+### Comandi
 ```bash
 sudo apt update
 sudo apt install -y ca-certificates curl gnupg
@@ -96,459 +289,475 @@ echo \
   sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
 sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-```
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-2.4. Verifica l'installazione:
-
-```bash
-docker --version
-docker compose version
-```
-
-Dovresti vedere un numero di versione per entrambi i comandi, senza errori.
-
-2.5. (Solo Linux) Aggiungi il tuo utente al gruppo `docker` per non dover usare `sudo` ogni volta:
-
-```bash
 sudo usermod -aG docker $USER
 ```
 
-Poi disconnettiti e riconnettiti (o riavvia il PC) perché la modifica abbia effetto.
-
-### Passo 3 — Installa Obsidian
-
-3.1. Scarica Obsidian da `obsidian.md` per il tuo sistema operativo.
-
-3.2. Installalo normalmente (Windows: eseguibile `.exe`; macOS: trascina in Applicazioni; Linux: `.AppImage` o pacchetto `.deb`).
-
-3.3. Al primo avvio, **non aprire ancora un vault**: lo creeremo nel Passo 5.
-
-### Passo 4 — Installa Ollama
-
-4.1. Scarica Ollama da `ollama.com` per il tuo sistema operativo.
-
-4.2. Su Linux puoi installarlo anche da terminale:
-
+Disconnettiti e riconnettiti perché il gruppo abbia effetto:
 ```bash
-curl -fsSL https://ollama.com/install.sh | sh
+exit
+ssh brainos
 ```
+(oppure, se lavori direttamente sul PC senza SSH, disconnetti/riconnetti la sessione utente o riavvia)
 
-4.3. Verifica che sia attivo:
-
+### Configurazione
 ```bash
-ollama --version
+sudo systemctl enable docker
 ```
 
-4.4. Ollama parte automaticamente come servizio in background sulla porta `11434`.
-
-### Passo 5 — Crea la struttura delle cartelle del Brain
-
-5.1. Scegli dove vivrà il tuo Second Brain sul disco. Esempio su Windows: `D:\SecondBrain`. Esempio su Linux/macOS: `~/SecondBrain`.
-
-5.2. Crea la struttura di base (da terminale, esempio Linux/macOS):
-
+### Verifica
 ```bash
-mkdir -p ~/SecondBrain/vault
-mkdir -p ~/SecondBrain/docker
-mkdir -p ~/SecondBrain/backups
-mkdir -p ~/SecondBrain/database
+docker --version
+docker compose version
+docker run hello-world
 ```
 
-Su Windows puoi crearle semplicemente da Esplora File, oppure con PowerShell:
+### Problemi comuni
+| Problema | Causa |
+|---|---|
+| `permission denied` eseguendo `docker` | L'utente non è (ancora) nel gruppo `docker`, manca logout/login |
+| `docker: command not found` | Installazione non completata |
 
-```powershell
-New-Item -ItemType Directory -Force -Path "D:\SecondBrain\vault"
-New-Item -ItemType Directory -Force -Path "D:\SecondBrain\docker"
-New-Item -ItemType Directory -Force -Path "D:\SecondBrain\backups"
-New-Item -ItemType Directory -Force -Path "D:\SecondBrain\database"
-```
-
-5.3. Apri Obsidian, scegli **"Apri cartella come vault"** e seleziona la cartella `vault` appena creata.
-
-5.4. Dentro il vault, crea la struttura ispirata al README della repository (semplificata per uso singolo):
-
-```text
-vault/
-├── AGENTS.md
-├── 00_System/
-├── 02_Projects/
-├── 03_Knowledge/
-├── 08_Decisions/
-├── 09_Bugs/
-├── 11_Prompts/
-└── 13_Journal/
-```
-
-Puoi crearle direttamente dentro Obsidian con clic destro → "Nuova cartella", oppure da terminale:
-
+### Come risolverli
 ```bash
-cd ~/SecondBrain/vault
-mkdir -p 00_System 02_Projects 03_Knowledge 08_Decisions 09_Bugs 11_Prompts 13_Journal
-touch AGENTS.md
+groups
+sudo usermod -aG docker $USER
 ```
 
-5.5. Apri `AGENTS.md` e scrivi un contenuto minimo iniziale, ad esempio:
+### Cosa fare dopo
+Procedi alla Fase 5.
 
-```markdown
+---
+
+## Fase 5 — Rete locale e nome host
+
+### Obiettivo
+Rendere il PC sempre raggiungibile con lo stesso indirizzo IP.
+
+### Cosa fare
+Configura una **riserva DHCP** sul router per il PC.
+
+> Il DNS locale (Technitium, nomi tipo `brain.local`) è **facoltativo** ed è descritto in `Claude-02.md`, Fase 5: puoi aggiungerlo in qualsiasi momento senza toccare nulla di quanto fatto qui.
+
+### Comandi
+Trova l'indirizzo MAC:
+```bash
+ip link show
+```
+
+### Configurazione
+1. Accedi al pannello del router (es. `http://192.168.1.1`).
+2. Cerca "DHCP Reservation" o "IP statico via DHCP".
+3. Associa il MAC address del PC a un IP fisso (es. `192.168.1.50`).
+4. Salva.
+
+### Verifica
+```bash
+ping 192.168.1.50
+```
+L'IP deve restare lo stesso anche dopo un riavvio del PC.
+
+### Problemi comuni
+| Problema | Causa |
+|---|---|
+| L'IP cambia comunque | Riserva DHCP non salvata correttamente, o router non supportato |
+
+### Come risolverli
+Verifica nel pannello del router che la riserva sia effettivamente elencata e attiva.
+
+### Cosa fare dopo
+Procedi alla Fase 6.
+
+---
+
+## Fase 6 — Struttura delle cartelle del Brain
+
+### Obiettivo
+Preparare la struttura dati completa del vault — **identica a Claude-02**, incluse tutte le 14 cartelle previste dal README originale, anche se per ora ne userai attivamente solo alcune.
+
+### Cosa fare
+Crea la struttura completa dentro `/data`, già montata nella Fase 3.
+
+### Comandi
+```bash
+mkdir -p /data/brain/vault/{00_System,01_Identity,02_Projects,03_Knowledge,04_Architecture,05_Code,06_AI,07_Research,08_Decisions,09_Bugs,10_Snippets,11_Prompts,12_Library,13_Journal,99_Archive}
+
+touch /data/brain/vault/AGENTS.md
+
+mkdir -p /data/brain/vectors
+mkdir -p /data/brain/database
+mkdir -p /data/brain/cache
+mkdir -p /data/git
+mkdir -p /data/backups
+mkdir -p /data/docker
+```
+
+### Configurazione
+Popola `AGENTS.md`:
+```bash
+cat > /data/brain/vault/AGENTS.md << 'EOF'
 # AGENTS.md
 
-Questo file è il punto di ingresso per qualsiasi AI che consulta questo Brain.
+Punto di ingresso per qualsiasi agente AI collegato a questo Brain.
 
-Prima di rispondere:
-1. Consulta la cartella 03_Knowledge per informazioni generali.
-2. Consulta 02_Projects per il progetto specifico.
-3. Consulta 08_Decisions per decisioni già prese.
-4. Consulta 09_Bugs per problemi già risolti.
-5. Solo dopo, rispondi.
+## Priorità delle fonti
+1. Brain (questa knowledge base)
+2. Documentazione del progetto specifico
+3. Codice del progetto
+4. Internet (solo se le prime tre fonti non bastano)
+
+## Prima di rispondere, l'agente deve:
+1. Comprendere il contesto della richiesta.
+2. Identificare il progetto pertinente in 02_Projects/.
+3. Recuperare la documentazione pertinente.
+4. Leggere gli standard in 00_System/.
+5. Analizzare le decisioni precedenti in 08_Decisions/.
+6. Verificare bug già risolti in 09_Bugs/.
+7. Produrre la risposta.
+EOF
 ```
 
-### Passo 6 — Scarica un modello AI locale con Ollama
-
-6.1. Scegli un modello adatto alla RAM disponibile (vedi tabella nella sezione 7).
-
-6.2. Scaricalo con:
-
+Inizializza Git nel vault:
 ```bash
+cd /data/brain/vault
+git init
+git add .
+git commit -m "Inizializzazione struttura Brain"
+```
+
+### Verifica
+```bash
+find /data/brain/vault -maxdepth 1 -type d
+cd /data/brain/vault && git log --oneline
+```
+
+### Problemi comuni
+| Problema | Causa |
+|---|---|
+| `git commit` fallisce chiedendo nome/email | Git non configurato globalmente |
+
+### Come risolverli
+```bash
+git config --global user.name "Il Tuo Nome"
+git config --global user.email "tua-email@esempio.com"
+```
+
+### Cosa fare dopo
+Procedi alla Fase 9 per l'AI locale. (Le Fasi 7 e 8 — database applicativo e vettoriale — sono facoltative in questa versione domestica: le trovi pronte, con gli stessi path, in `Claude-02.md`.)
+
+---
+
+## Fase 9 — AI locale con Ollama
+
+### Obiettivo
+Installare il runtime AI locale.
+
+### Cosa fare
+Installa Ollama direttamente sul sistema host.
+
+### Comandi
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+ollama --version
 ollama pull llama3.1:8b
+ollama run llama3.1:8b "Rispondi con una sola parola: funzioni?"
 ```
 
-6.3. Testa che funzioni:
-
+### Configurazione
+Per renderlo raggiungibile da Open WebUI (Fase 10) e da altri dispositivi della LAN:
 ```bash
-ollama run llama3.1:8b "Ciao, presentati in una frase"
+sudo systemctl edit ollama.service
+```
+Aggiungi:
+```ini
+[Service]
+Environment="OLLAMA_HOST=0.0.0.0:11434"
+```
+Riavvia:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart ollama
 ```
 
-Se ricevi una risposta testuale, il modello funziona correttamente.
-
-### Passo 7 — Avvia un'interfaccia web per parlare col Brain (Open WebUI)
-
-Per non dover usare solo il terminale, installiamo **Open WebUI**, un'interfaccia web che si collega a Ollama ed è pensata per girare in Docker.
-
-7.1. Crea un file `docker-compose.yml` dentro `~/SecondBrain/docker/`:
-
-```yaml
-version: "3.8"
-
-services:
-  open-webui:
-    image: ghcr.io/open-webui/open-webui:main
-    container_name: open-webui
-    ports:
-      - "3000:8080"
-    volumes:
-      - ./open-webui-data:/app/backend/data
-    environment:
-      - OLLAMA_BASE_URL=http://host.docker.internal:11434
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    restart: unless-stopped
+### Verifica
+```bash
+ollama list
+```
+Dal PC principale (rete locale):
+```bash
+curl http://192.168.1.50:11434/api/tags
 ```
 
-**Spiegazione riga per riga:**
-
-| Riga | Significato |
+### Problemi comuni
+| Problema | Causa |
 |---|---|
-| `image: ghcr.io/open-webui/open-webui:main` | Usa l'immagine ufficiale di Open WebUI |
-| `container_name: open-webui` | Nome del container, utile per i comandi Docker |
-| `ports: "3000:8080"` | Espone la porta interna 8080 sulla porta 3000 del tuo PC |
-| `volumes: ./open-webui-data:/app/backend/data` | Salva i dati (chat, impostazioni) in una cartella locale persistente |
-| `environment: OLLAMA_BASE_URL` | Dice a Open WebUI dove trovare Ollama (che gira fuori da Docker, sul PC host) |
-| `extra_hosts` | Permette al container di raggiungere il PC host tramite `host.docker.internal` |
-| `restart: unless-stopped` | Riavvia automaticamente il servizio se il PC si riavvia (a meno che tu lo fermi manualmente) |
+| Risposte molto lente | RAM insufficiente per il modello scelto (vedi tabella modelli sotto) |
+| `ollama: command not found` | PATH non aggiornato, riapri la sessione |
+| Non raggiungibile da altri dispositivi | `OLLAMA_HOST` non configurato, o firewall blocca la porta 11434 |
 
-7.2. Avvia il servizio:
-
+### Come risolverli
 ```bash
-cd ~/SecondBrain/docker
-docker compose up -d
+free -h
+ollama pull llama3.2:3b   # modello più leggero
+sudo ufw allow 11434/tcp
 ```
 
-7.3. Apri il browser e vai su `http://localhost:3000`. Crea il tuo account amministratore locale (email e password a tua scelta — restano solo sul tuo PC).
+### Modelli consigliati in base alla RAM
 
-7.4. Nelle impostazioni di Open WebUI, verifica che il modello scaricato con Ollama (es. `llama3.1:8b`) sia visibile e selezionabile.
-
-### Passo 8 — Verifica l'accesso dagli altri dispositivi della rete locale
-
-8.1. Trova l'indirizzo IP locale del PC principale.
-
-Su Windows (PowerShell):
-```powershell
-ipconfig
-```
-Cerca la voce "Indirizzo IPv4" della tua scheda di rete attiva (es. `192.168.1.50`).
-
-Su Linux/macOS:
-```bash
-ip addr show   # Linux
-ifconfig       # macOS
-```
-
-8.2. Da un altro PC o dal telefono, connesso alla **stessa rete Wi-Fi**, apri il browser e vai su:
-
-```
-http://192.168.1.50:3000
-```
-
-(sostituendo con il tuo IP reale)
-
-8.3. Se la pagina di Open WebUI si apre, l'accesso dalla rete locale funziona correttamente.
-
-> ⚠️ Nota importante: questo indirizzo funziona **solo mentre sei connesso alla stessa rete Wi-Fi di casa**. Non è raggiungibile da fuori casa, esattamente come richiesto in questo scenario.
-
----
-
-## 4. Configurazione della rete locale
-
-### Passo 9 — Rendi stabile l'indirizzo IP del PC principale
-
-Se l'IP del PC cambia ogni volta che si riavvia il router, dovrai aggiornare ogni volta l'indirizzo usato dagli altri dispositivi. Per evitarlo:
-
-9.1. Accedi alla pagina di amministrazione del tuo router (solitamente `192.168.1.1` o `192.168.0.1`, controlla l'etichetta sotto al router).
-
-9.2. Cerca la sezione **DHCP Reservation** (a volte chiamata "Indirizzo IP statico" o "Riserva DHCP").
-
-9.3. Associa l'indirizzo MAC del PC principale a un IP fisso (es. `192.168.1.50`).
-
-9.4. Salva e riavvia il router se richiesto.
-
-> 💡 In alternativa, puoi impostare un IP statico direttamente sul PC nelle impostazioni di rete, ma la riserva DHCP sul router è generalmente più semplice da gestire nel tempo.
-
----
-
-## 5. Struttura delle cartelle
-
-Struttura finale consigliata per questo scenario domestico:
-
-```text
-SecondBrain/
-├── vault/                  → Vault Obsidian (Markdown)
-│   ├── AGENTS.md
-│   ├── 00_System/
-│   ├── 02_Projects/
-│   ├── 03_Knowledge/
-│   ├── 08_Decisions/
-│   ├── 09_Bugs/
-│   ├── 11_Prompts/
-│   └── 13_Journal/
-├── docker/
-│   ├── docker-compose.yml
-│   └── open-webui-data/
-├── database/                → (se in futuro aggiungerai un DB vettoriale)
-└── backups/                 → Copie di sicurezza periodiche
-```
-
----
-
-## 6. Docker Compose per i servizi
-
-Il file `docker-compose.yml` creato al Passo 7 è sufficiente per iniziare. Se in un secondo momento vuoi aggiungere anche un servizio di ricerca semantica (ChromaDB) restando comunque in ambito "casalingo", puoi estenderlo così:
-
-```yaml
-version: "3.8"
-
-services:
-  open-webui:
-    image: ghcr.io/open-webui/open-webui:main
-    container_name: open-webui
-    ports:
-      - "3000:8080"
-    volumes:
-      - ./open-webui-data:/app/backend/data
-    environment:
-      - OLLAMA_BASE_URL=http://host.docker.internal:11434
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    restart: unless-stopped
-
-  chromadb:
-    image: chromadb/chroma:latest
-    container_name: chromadb
-    ports:
-      - "8000:8000"
-    volumes:
-      - ../database/chroma-data:/chroma/chroma
-    restart: unless-stopped
-```
-
-**Spiegazione del blocco aggiunto (`chromadb`):**
-
-| Riga | Significato |
-|---|---|
-| `image: chromadb/chroma:latest` | Immagine ufficiale di ChromaDB |
-| `ports: "8000:8000"` | Espone il database vettoriale sulla porta 8000 |
-| `volumes` | Salva i dati vettoriali in modo persistente fuori dal container |
-
-> Questo blocco è **opzionale** in questa versione domestica: aggiungilo solo quando vorrai iniziare a sperimentare la ricerca semantica sul tuo vault.
-
----
-
-## 7. AI locali e modelli consigliati
-
-Per un utilizzo domestico su un solo PC, la scelta del modello dipende dalla RAM disponibile.
-
-| RAM disponibile | Modello consigliato | Comando di download |
+| RAM disponibile | Modello consigliato | Comando |
 |---|---|---|
 | 8 GB | `llama3.2:3b` o `phi3:mini` | `ollama pull llama3.2:3b` |
 | 16 GB | `llama3.1:8b` o `mistral:7b` | `ollama pull llama3.1:8b` |
 | 32 GB (senza GPU dedicata) | `qwen2.5:14b` | `ollama pull qwen2.5:14b` |
-| 32 GB + GPU 12GB+ VRAM | `qwen2.5:32b` o modelli 30B+ | `ollama pull qwen2.5:32b` |
+| 32 GB + GPU 12GB+ VRAM | `qwen2.5:32b` | `ollama pull qwen2.5:32b` |
 
-> 💡 Suggerimento: parti sempre con un modello piccolo (3B-8B) per verificare che tutto il flusso funzioni, poi eventualmente passa a modelli più grandi se hai hardware sufficiente e vuoi risposte più accurate.
-
----
-
-## 8. Configurazione semplice del Brain
-
-### Passo 10 — Collega Obsidian al flusso di lavoro quotidiano
-
-10.1. Ogni volta che impari qualcosa di rilevante, crei una decisione tecnica o risolvi un bug, scrivi una nota nella cartella appropriata del vault (`08_Decisions/`, `09_Bugs/`, `03_Knowledge/`).
-
-10.2. Usa un formato coerente per le note. Esempio per una decisione:
-
-```markdown
-# Decision 001 - Scelta del database vettoriale
-
-Data: 2026-07-16
-
-## Problema
-Serve un database per la ricerca semantica.
-
-## Soluzione
-Ho scelto ChromaDB per iniziare.
-
-## Motivazione
-Semplice da avviare, sufficiente per un vault di piccole dimensioni.
-
-## Alternative considerate
-Qdrant (rimandato a una fase successiva).
-
-## Stato
-Attiva
-```
-
-### Passo 11 — Usa Open WebUI insieme al vault
-
-11.1. Apri Open WebUI dal browser (`http://localhost:3000` oppure dall'IP locale da altri dispositivi).
-
-11.2. Per ora, in questa versione semplice, il collegamento tra vault e AI è **manuale**: puoi copiare il contenuto di una nota rilevante e incollarlo nella chat quando fai una domanda, oppure caricare direttamente i file Markdown tramite la funzione di upload documenti di Open WebUI, se disponibile nella versione che hai installato.
-
-11.3. Una integrazione automatica (il vault che alimenta l'AI senza copia-incolla manuale) richiede il layer di ricerca semantica descritto nella sezione 6 — è un passo più avanzato, non necessario per iniziare.
+### Cosa fare dopo
+Procedi alla Fase 10.
 
 ---
 
-## 9. Backup
+## Fase 10 — Interfaccia AI (Open WebUI)
 
-### Passo 12 — Configura un backup locale semplice
+### Obiettivo
+Interfaccia web per parlare con i modelli AI, raggiungibile da qualsiasi dispositivo della rete locale.
 
-Anche in una versione domestica minimale, il backup **non va saltato**: è la parte del progetto originale che vale sempre, indipendentemente dalla scala.
+### Cosa fare
+Installa Open WebUI via Docker Compose, collegato a Ollama.
 
-12.1. Crea uno script di backup. Esempio su Linux/macOS (`~/SecondBrain/backup.sh`):
-
+### Comandi
 ```bash
-#!/bin/bash
-DATA=$(date +%Y-%m-%d_%H-%M)
-DESTINAZIONE=~/SecondBrain/backups/backup_$DATA.tar.gz
-
-tar -czf $DESTINAZIONE ~/SecondBrain/vault ~/SecondBrain/database
-
-echo "Backup completato: $DESTINAZIONE"
+mkdir -p /data/docker/open-webui
+cd /data/docker/open-webui
 ```
 
-Rendilo eseguibile:
-
-```bash
-chmod +x ~/SecondBrain/backup.sh
+Crea `docker-compose.yml`:
+```yaml
+version: "3.8"
+services:
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: brainos-openwebui
+    ports:
+      - "3000:8080"
+    volumes:
+      - /data/brain/cache/open-webui:/app/backend/data
+    environment:
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
 ```
 
-Eseguilo manualmente quando vuoi:
-
+Avvia:
 ```bash
-~/SecondBrain/backup.sh
-```
-
-12.2. Su Windows, puoi usare un semplice script PowerShell (`backup.ps1`):
-
-```powershell
-$data = Get-Date -Format "yyyy-MM-dd_HH-mm"
-$destinazione = "D:\SecondBrain\backups\backup_$data.zip"
-Compress-Archive -Path "D:\SecondBrain\vault","D:\SecondBrain\database" -DestinationPath $destinazione
-
-Write-Host "Backup completato: $destinazione"
-```
-
-12.3. **Copia periodicamente** la cartella `backups/` anche su una chiavetta USB o un hard disk esterno, per avere una seconda copia fisica separata dal PC.
-
-12.4. (Opzionale ma consigliato) Inizializza anche un repository Git locale nel vault, per avere una cronologia delle modifiche:
-
-```bash
-cd ~/SecondBrain/vault
-git init
-git add .
-git commit -m "Primo commit del vault"
-```
-
-Ripeti `git add . && git commit -m "..."` periodicamente (es. una volta a settimana) per avere checkpoint recuperabili.
-
----
-
-## 10. Aggiornamenti
-
-### Passo 13 — Aggiorna Ollama e i modelli
-
-```bash
-# Aggiorna Ollama (rieseguendo lo script di installazione)
-curl -fsSL https://ollama.com/install.sh | sh
-
-# Aggiorna un modello già scaricato
-ollama pull llama3.1:8b
-```
-
-### Passo 14 — Aggiorna i container Docker
-
-```bash
-cd ~/SecondBrain/docker
-docker compose pull
 docker compose up -d
 ```
 
-Questo scarica le versioni più recenti delle immagini (Open WebUI, ChromaDB) e riavvia i container mantenendo i dati salvati nei volumi.
+### Configurazione
+Apri il browser (da qualsiasi PC della rete) su:
+```
+http://192.168.1.50:3000
+```
+Crea l'account amministratore locale (resta solo sul tuo PC).
 
-### Passo 15 — Aggiorna Obsidian
+### Verifica
+- [ ] La pagina di login di Open WebUI si apre correttamente
+- [ ] Il modello Ollama scaricato è visibile e selezionabile
+- [ ] Una domanda di prova riceve una risposta coerente
+- [ ] Accesso verificato anche da un secondo dispositivo (altro PC o telefono) sulla stessa rete Wi-Fi
 
-Obsidian si aggiorna generalmente da solo, oppure te lo notifica all'apertura. In alternativa scarica manualmente l'ultima versione da `obsidian.md`.
+### Problemi comuni
+| Problema | Causa |
+|---|---|
+| Open WebUI non trova nessun modello | `OLLAMA_BASE_URL` errato, o Ollama non configurato su `0.0.0.0` (Fase 9) |
+| Pagina bianca o errore 502 | Il container ha impiegato più tempo del previsto ad avviarsi |
 
----
+### Come risolverli
+```bash
+docker logs brainos-openwebui
+docker exec -it brainos-openwebui curl http://host.docker.internal:11434/api/tags
+```
 
-## 11. Errori comuni
-
-| Problema | Causa probabile | Soluzione |
-|---|---|---|
-| Open WebUI non trova Ollama | `OLLAMA_BASE_URL` errato o Ollama non in esecuzione | Verifica che Ollama sia attivo (`ollama list`) e che l'URL nel `docker-compose.yml` sia corretto |
-| Non riesco ad accedere da telefono/altro PC | Firewall del PC blocca la porta, oppure dispositivi su reti Wi-Fi diverse (es. banda 2.4GHz/5GHz separate, o rete ospiti) | Verifica che tutti i dispositivi siano sulla stessa rete; controlla le regole del firewall per la porta 3000 |
-| L'IP del PC cambia e i dispositivi non si connettono più | Nessuna riserva DHCP impostata | Configura la riserva DHCP sul router (vedi Passo 9) |
-| Il modello AI risponde molto lentamente | Modello troppo grande per l'hardware disponibile | Passa a un modello più piccolo (vedi tabella sezione 7) |
-| Docker non parte / errore "Cannot connect to the Docker daemon" | Docker Desktop non avviato (Windows/macOS) o servizio Docker non attivo (Linux) | Avvia Docker Desktop; su Linux esegui `sudo systemctl start docker` |
-| I dati spariscono dopo `docker compose down` | Volumi non configurati correttamente nel `docker-compose.yml` | Verifica che la sezione `volumes` punti a cartelle locali persistenti, non a percorsi temporanei |
-| Obsidian non mostra le nuove cartelle create da terminale | Cache dell'interfaccia non aggiornata | Chiudi e riapri Obsidian, oppure usa il comando "Reload app" dalla palette comandi (Ctrl/Cmd+P) |
-
----
-
-## 12. Checklist finale
-
-Usa questa checklist per verificare di aver completato correttamente l'installazione domestica.
-
-- [ ] Docker installato e funzionante (`docker --version` restituisce una versione)
-- [ ] Obsidian installato e vault creato in `SecondBrain/vault`
-- [ ] Struttura di cartelle del vault creata (`AGENTS.md`, `02_Projects`, `03_Knowledge`, ecc.)
-- [ ] Ollama installato e almeno un modello scaricato
-- [ ] Open WebUI avviato tramite `docker compose up -d` e raggiungibile su `http://localhost:3000`
-- [ ] Accesso verificato da un secondo dispositivo sulla rete locale (PC o telefono via Wi-Fi)
-- [ ] IP del PC reso stabile tramite riserva DHCP sul router
-- [ ] Script di backup creato e testato almeno una volta
-- [ ] Copia di backup salvata anche su un supporto esterno (USB/HDD)
-- [ ] (Opzionale) Repository Git inizializzato nel vault per la cronologia delle modifiche
+### Cosa fare dopo
+Procedi alla Fase 11.
 
 ---
 
-> 🎯 **Risultato finale di questa guida**: un Second Brain funzionante, interamente locale, senza alcuna esposizione su Internet, accessibile dal PC principale e da qualsiasi altro dispositivo della rete Wi-Fi di casa (PC o telefono), con AI locale tramite Ollama e Open WebUI, e un sistema di backup semplice ma funzionante.
+## Fase 11 — Vault Obsidian (versione locale)
+
+### Obiettivo
+Collegare Obsidian al vault. In questa versione domestica, senza sincronizzazione multi-dispositivo avanzata: il vault è già versionato in Git dalla Fase 6, il che è sufficiente per iniziare.
+
+### Cosa fare
+Scegli in base a dove si trova Obsidian rispetto al vault:
+
+- **Stesso PC**: apri Obsidian direttamente sulla cartella `/data/brain/vault`.
+- **Altro PC della rete**: condividi `/data/brain/vault` come cartella di rete (SMB/Samba), oppure clona il repository Git locale su quel PC.
+
+### Comandi
+Se usi un altro PC via Git (metodo consigliato, identico a quello usato in `Claude-02.md`, Fase 11):
+```bash
+mkdir -p /data/git/brain.git
+cd /data/git/brain.git
+git init --bare
+```
+Sul PC client:
+```bash
+git clone ssh://brainadmin@192.168.1.50/data/git/brain.git ~/BrainVault
+```
+Collega il vault del server come remoto:
+```bash
+cd /data/brain/vault
+git remote add origin /data/git/brain.git
+git push origin main
+```
+
+### Configurazione
+Apri Obsidian e scegli **"Apri cartella come vault"**, puntando a `/data/brain/vault` (stesso PC) oppure a `~/BrainVault` (PC client).
+
+### Verifica
+- [ ] Il vault è visibile e navigabile in Obsidian
+- [ ] Se usi più dispositivi: una modifica fatta su un client, dopo `git push`, è visibile con `git pull` sul server
+
+### Problemi comuni
+| Problema | Causa |
+|---|---|
+| `git push` chiede la password ogni volta | Nessuna chiave SSH configurata |
+| Conflitti di merge tra client e server | Modifiche parallele senza sincronizzare prima |
+
+### Come risolverli
+```bash
+ssh-keygen -t ed25519 -C "brain-client"
+ssh-copy-id brainadmin@192.168.1.50
+```
+Fai sempre `git pull` prima di iniziare a scrivere.
+
+> Se in futuro vorrai sincronizzare **più di due dispositivi** in modo robusto, la sezione completa (con Nextcloud/Obsidian Sync come alternative) è già pronta in `Claude-02.md`, Fase 11 — stessi path, nessuna modifica necessaria.
+
+### Cosa fare dopo
+Procedi alla Fase 14 per i test.
+
+---
+
+## Fase 14 — Test end-to-end (versione ridotta)
+
+### Obiettivo
+Verificare che i componenti installati in questa versione domestica funzionino correttamente insieme.
+
+### Comandi / Verifica
+1. **Test Docker**:
+```bash
+docker ps
+```
+2. **Test Ollama**:
+```bash
+ollama list
+```
+3. **Test Open WebUI**: apri `http://192.168.1.50:3000` e invia una domanda di prova.
+4. **Test vault Git** (se usi più dispositivi): modifica un file, `git push`, poi verifica con `git log` sul server.
+
+> I test relativi a PostgreSQL, ChromaDB, VPN e reverse proxy non si applicano finché non attivi le Fasi 7, 8, 12 e 13 da `Claude-02.md`.
+
+### Problemi comuni
+Vedi le tabelle "Problemi comuni" di ciascuna Fase precedente.
+
+### Come risolverli
+Ripercorri la Fase corrispondente al componente che fallisce, controllando i log con `docker logs <nome-container>`.
+
+### Cosa fare dopo
+Procedi alla Fase 15 per il backup.
+
+---
+
+## Fase 15 — Backup
+
+### Obiettivo
+Proteggere il Brain — questa parte **non va mai saltata**, indipendentemente dalla scala del sistema. Identica a `Claude-02.md`.
+
+### Comandi
+Crea lo script:
+```bash
+sudo nano /data/docker/backup.sh
+```
+Contenuto:
+```bash
+#!/bin/bash
+set -e
+
+DATA=$(date +%Y-%m-%d_%H-%M)
+SORGENTE=/data/brain
+DESTINAZIONE=/data/backups/brain_backup_$DATA.tar.gz
+
+tar -czf $DESTINAZIONE $SORGENTE
+
+# Mantieni solo gli ultimi 14 backup
+ls -1t /data/backups/brain_backup_*.tar.gz | tail -n +15 | xargs -r rm
+
+echo "Backup completato: $DESTINAZIONE"
+```
+Rendilo eseguibile:
+```bash
+chmod +x /data/docker/backup.sh
+```
+
+### Configurazione
+Pianifica l'esecuzione giornaliera con `cron` (es. ogni notte alle 3:00):
+```bash
+crontab -e
+```
+Aggiungi:
+```text
+0 3 * * * /data/docker/backup.sh >> /data/backups/backup.log 2>&1
+```
+
+### Verifica
+```bash
+/data/docker/backup.sh
+ls -la /data/backups/
+```
+
+### Problemi comuni
+| Problema | Causa |
+|---|---|
+| Lo script cron non si esegue | Percorso errato nel crontab, o permessi di esecuzione mancanti |
+| Il backup cresce troppo nel tempo | Nessuna rotazione configurata (già inclusa nello script sopra) |
+
+### Come risolverli
+```bash
+grep CRON /var/log/syslog
+ls -la /data/docker/backup.sh
+```
+
+12.3. **Copia periodicamente** la cartella `/data/backups` anche su una chiavetta USB o un hard disk esterno, per avere una seconda copia fisica separata dal PC (regola delle tre copie).
+
+### Cosa fare dopo
+A questo punto hai un Second Brain domestico funzionante. Per i prossimi passi, vai direttamente in `Claude-02.md` alle Fasi che ti interessano:
+
+- **Vuoi accedere anche da fuori casa?** → Fase 12 (VPN con Tailscale)
+- **Vuoi ricerca semantica sul vault?** → Fasi 7-8 (Postgres + ChromaDB)
+- **Vuoi nomi tipo `brain.local` invece dell'IP?** → Fase 5 (DNS locale) e Fase 13 (reverse proxy)
+- **Vuoi mantenere il sistema aggiornato nel tempo?** → Fase 16
+- **Vuoi automazioni intelligenti (Brain Keeper)?** → Fase 17
+
+In tutti i casi, i path (`/data/brain/...`, `/data/docker/...`) e i nomi dei container (`brainos-*`) sono già gli stessi: non serve alcuna migrazione, solo continuare da dove questa guida si è fermata.
+
+---
+
+## Checklist finale
+
+- [ ] Ubuntu installato e funzionante (Fase 1)
+- [ ] `/data` montato in modo persistente, struttura cartelle creata (Fase 3)
+- [ ] Docker installato e funzionante (Fase 4)
+- [ ] IP del PC reso stabile tramite riserva DHCP (Fase 5)
+- [ ] Struttura completa del vault creata in `/data/brain/vault`, con `AGENTS.md` e Git inizializzato (Fase 6)
+- [ ] Ollama installato e almeno un modello scaricato (Fase 9)
+- [ ] Open WebUI avviato e raggiungibile su `http://<ip-server>:3000` (Fase 10)
+- [ ] Obsidian collegato al vault (Fase 11)
+- [ ] Test end-to-end superati (Fase 14)
+- [ ] Script di backup creato, testato e pianificato via cron (Fase 15)
+- [ ] Copia di backup salvata anche su un supporto esterno
+
+---
+
+> 🎯 **Risultato finale di questa guida**: un Second Brain funzionante, interamente locale, con AI tramite Ollama e Open WebUI, vault Obsidian versionato in Git e backup automatico — costruito sulla stessa identica base (`/data`, Docker, nomi dei container) della versione completa in `Claude-02.md`, pronto per essere esteso senza modifiche quando vorrai aggiungere VPN, database o ricerca semantica.
