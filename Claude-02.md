@@ -421,12 +421,22 @@ Procedi alla Fase 6 per la struttura delle cartelle del Brain.
 ### Obiettivo
 Preparare la struttura dati che ospiterà il vault, il database e i backup, secondo quanto descritto nel README e in `opzioneAumentoMemoriaUbuntu.md`.
 
+La struttura del vault si basa su due tipi di memoria distinti, pensati per essere consultati in modo diverso da un agente AI:
+
+- **`Projects/`** — memoria di progetto: documentazione, decisioni, bug, roadmap. Appartiene sempre a un progetto specifico (`Projects/<NomeProgetto>/`) e in genere non serve fuori da quel contesto.
+- **`Knowledge/`** — memoria personale riutilizzabile: appunti di programmazione, pattern architetturali, snippet di codice, convenzioni, note su Docker/Linux/AI. È il patrimonio che cresce nel tempo e che un agente dovrebbe consultare trasversalmente, indipendentemente dal progetto su cui si sta lavorando.
+
+Le vecchie cartelle globali per decisioni e bug non esistono più come categorie a sé: una decisione o un bug appartengono sempre a *qualcosa* (un progetto), quindi vivono dentro `Projects/<NomeProgetto>/Decisions.md` e `Bugs.md`. Quando un pattern o una soluzione nata in un progetto si rivela riutilizzabile ovunque, si **promuove** spostandola in `Knowledge/`, lasciando un collegamento nel progetto originale per mantenere la cronologia.
+
+Un agente AI, di fronte a una richiesta, dovrebbe idealmente seguire questo percorso: progetto corrente → `Knowledge/` → eventualmente altri progetti per analogie → risposta.
+
 ### Cosa fare
 Crea la struttura completa dentro `/data`, già montata nella Fase 3.
 
 ### Comandi
 ```bash
-mkdir -p /data/brain/vault/{00_System,01_Identity,02_Projects,03_Knowledge,04_Architecture,05_Code,06_AI,07_Research,08_Decisions,09_Bugs,10_Snippets,11_Prompts,12_Library,13_Journal,99_Archive}
+mkdir -p /data/brain/vault/{System,Identity,Projects,Prompts,Templates,Resources,Journal,Inbox,Archive}
+mkdir -p /data/brain/vault/Knowledge/{Programming,DevOps,AI,Patterns,Snippets}
 
 touch /data/brain/vault/AGENTS.md
 
@@ -438,6 +448,21 @@ mkdir -p /data/backups
 mkdir -p /data/docker
 ```
 
+**Cosa contiene ogni cartella di primo livello:**
+
+| Cartella | Contenuto |
+|---|---|
+| `Projects/` | Un sottocartella per progetto (`README.md`, `Architecture.md`, `Decisions.md`, `Bugs.md`, `Roadmap.md`) |
+| `Knowledge/` | Programmazione, DevOps, AI, pattern architetturali, snippet — riutilizzabili ovunque |
+| `Prompts/` | Prompt riutilizzabili, non legati a un progetto specifico |
+| `Templates/` | Scheletri di progetto e template di documenti |
+| `Resources/` | PDF, libri, documentazione esterna, datasheet |
+| `Journal/` | Note giornaliere e idee |
+| `Inbox/` | Appunti veloci da classificare in seguito |
+| `Archive/` | Materiale non più attivo |
+| `System/` | Standard e convenzioni per gli agenti AI |
+| `Identity/` | Contesto personale, preferenze |
+
 ### Configurazione
 Popola `AGENTS.md` con le istruzioni base per qualsiasi AI che consulterà il Brain:
 
@@ -447,20 +472,39 @@ cat > /data/brain/vault/AGENTS.md << 'EOF'
 
 Punto di ingresso per qualsiasi agente AI collegato a questo Brain.
 
+## Struttura del vault
+- `Projects/` — memoria di progetto: documentazione, decisioni, bug e roadmap
+  specifici di ciascun progetto (in `Projects/<NomeProgetto>/`).
+- `Knowledge/` — memoria personale riutilizzabile: programmazione, DevOps, AI,
+  pattern architetturali (`Knowledge/Patterns/`), snippet di codice
+  (`Knowledge/Snippets/`).
+- `Prompts/` — prompt riutilizzabili, non legati a un progetto specifico.
+- `Templates/` — scheletri di progetto e template di documenti.
+- `Resources/` — documentazione esterna, PDF, libri, datasheet.
+- `Journal/` — note giornaliere e idee.
+- `Inbox/` — appunti veloci da classificare.
+- `Archive/` — materiale non più attivo.
+- `System/` — standard e convenzioni per gli agenti AI.
+- `Identity/` — contesto personale, preferenze.
+
 ## Priorità delle fonti
-1. Brain (questa knowledge base)
-2. Documentazione del progetto specifico
-3. Codice del progetto
-4. Internet (solo se le prime tre fonti non bastano)
+1. Progetto corrente (`Projects/<NomeProgetto>/`)
+2. Conoscenza generale (`Knowledge/`)
+3. Altri progetti (`Projects/`), per analogie o problemi già affrontati altrove
+4. Documentazione e codice del progetto specifico (nel repository del progetto,
+   fuori dal vault)
+5. Internet (solo se le fonti precedenti non bastano)
 
 ## Prima di rispondere, l'agente deve:
 1. Comprendere il contesto della richiesta.
-2. Identificare il progetto pertinente in 02_Projects/.
-3. Recuperare la documentazione pertinente.
-4. Leggere gli standard in 00_System/.
-5. Analizzare le decisioni precedenti in 08_Decisions/.
-6. Verificare bug già risolti in 09_Bugs/.
-7. Produrre la risposta.
+2. Identificare il progetto pertinente in `Projects/`.
+3. Recuperare decisioni e bug pertinenti (`Projects/<NomeProgetto>/Decisions.md`,
+   `Bugs.md`).
+4. Cercare in `Knowledge/` pattern, snippet o appunti riutilizzabili.
+5. Se necessario, verificare se altri progetti hanno affrontato un problema simile.
+6. Leggere gli standard in `System/`.
+7. Produrre la risposta, segnalando se un'informazione andrebbe "promossa" da un
+   progetto a `Knowledge/` perché riutilizzabile altrove.
 EOF
 ```
 
@@ -472,11 +516,18 @@ git add .
 git commit -m "Inizializzazione struttura Brain"
 ```
 
+> Nota: `Projects/` parte vuota. Quando avvii un nuovo progetto, crea al suo interno una sottocartella dedicata, ad esempio:
+> ```bash
+> mkdir -p /data/brain/vault/Projects/NomeProgetto
+> cd /data/brain/vault/Projects/NomeProgetto
+> touch README.md Architecture.md Decisions.md Bugs.md Roadmap.md
+> ```
+
 ### Verifica
 ```bash
-find /data/brain/vault -maxdepth 1 -type d
+find /data/brain/vault -maxdepth 2 -type d
 ```
-Dovresti vedere tutte le 14 cartelle create.
+Dovresti vedere tutte le cartelle di primo livello, con `Knowledge/` che contiene le sue sottocartelle.
 
 ```bash
 cd /data/brain/vault && git log --oneline
@@ -1214,6 +1265,7 @@ Questa fase è **evolutiva** e va affrontata solo dopo che le Fasi 1-16 sono sta
 3. Individua documenti duplicati o simili tramite similarità coseno sugli embedding.
 4. Individua documenti troppo grandi (es. oltre 3000 righe) e ne propone la suddivisione.
 5. Genera un report giornaliero/settimanale.
+6. Segnala eventuali contenuti in `Projects/<NomeProgetto>/` che, per ricorrenza o generalità, sarebbe utile promuovere in `Knowledge/`.
 
 ### Comandi
 Esempio concettuale di struttura del progetto Python (da sviluppare secondo le proprie esigenze):
@@ -1227,12 +1279,12 @@ pip install chromadb watchdog gitpython
 ```
 
 ### Configurazione
-Uno scheduler (`cron`, oppure un loop interno con `APScheduler` in Python) esegue lo script ogni notte, salvando il report in `/data/brain/vault/13_Journal/`.
+Uno scheduler (`cron`, oppure un loop interno con `APScheduler` in Python) esegue lo script ogni notte, salvando il report in `/data/brain/vault/Journal/`.
 
 ### Verifica
 Dopo l'esecuzione, controlla che venga generato un file di report leggibile, ad esempio:
 ```text
-/data/brain/vault/13_Journal/report_2026-07-16.md
+/data/brain/vault/Journal/report_2026-07-16.md
 ```
 
 ### Problemi comuni
