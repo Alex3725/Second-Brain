@@ -16,7 +16,7 @@
 | 3 | Configurazione storage (`/data`) | ✅ Uguale | ✅ Uguale |
 | 4 | Docker e Docker Compose | ✅ Uguale | ✅ Uguale |
 | 5 | Rete locale / DNS | ✅ Solo riserva DHCP | ✅ Anche DNS locale (Technitium) |
-| 6 | Struttura cartelle del Brain | ✅ Uguale (tutte le 14 cartelle) | ✅ Uguale |
+| 6 | Struttura cartelle del Brain | ✅ Uguale (stessa struttura `Projects/` + `Knowledge/`) | ✅ Uguale |
 | 7 | Database applicativo (Postgres) | ⏭️ Saltata | ✅ Presente |
 | 8 | Database vettoriale (ChromaDB) | ⏭️ Saltata | ✅ Presente |
 | 9 | AI locale (Ollama) | ✅ Uguale | ✅ Uguale |
@@ -374,14 +374,20 @@ Procedi alla Fase 6.
 ## Fase 6 — Struttura delle cartelle del Brain
 
 ### Obiettivo
-Preparare la struttura dati completa del vault — **identica a Claude-02**, incluse tutte le 14 cartelle previste dal README originale, anche se per ora ne userai attivamente solo alcune.
+Preparare la struttura dati completa del vault — **identica a Claude-02**. La logica alla base è separare due tipi di memoria:
+
+- **`Projects/`** → memoria di progetto: documentazione, decisioni, bug e roadmap che appartengono a un progetto specifico e, se apri un nuovo progetto, probabilmente non ti interessano.
+- **`Knowledge/`** → memoria personale riutilizzabile: appunti di programmazione, pattern, snippet, convenzioni. Cresce nel tempo e vale per qualsiasi progetto.
+
+Le vecchie cartelle globali `08_Decisions` e `09_Bugs` non esistono più come cartelle a sé: decisioni e bug vivono dentro `Projects/<NomeProgetto>/`, perché appartengono sempre a qualcosa di specifico. Quando una decisione o un pattern nato in un progetto si rivela riutilizzabile ovunque, lo **promuovi** spostandolo in `Knowledge/` e lasci un collegamento nel progetto originale.
 
 ### Cosa fare
 Crea la struttura completa dentro `/data`, già montata nella Fase 3.
 
 ### Comandi
 ```bash
-mkdir -p /data/brain/vault/{00_System,01_Identity,02_Projects,03_Knowledge,04_Architecture,05_Code,06_AI,07_Research,08_Decisions,09_Bugs,10_Snippets,11_Prompts,12_Library,13_Journal,99_Archive}
+mkdir -p /data/brain/vault/{System,Identity,Projects,Prompts,Templates,Resources,Journal,Inbox,Archive}
+mkdir -p /data/brain/vault/Knowledge/{Programming,DevOps,AI,Patterns,Snippets}
 
 touch /data/brain/vault/AGENTS.md
 
@@ -401,20 +407,39 @@ cat > /data/brain/vault/AGENTS.md << 'EOF'
 
 Punto di ingresso per qualsiasi agente AI collegato a questo Brain.
 
+## Struttura del vault
+- `Projects/` — memoria di progetto: documentazione, decisioni, bug e roadmap
+  specifici di ciascun progetto (in `Projects/<NomeProgetto>/`).
+- `Knowledge/` — memoria personale riutilizzabile: programmazione, DevOps, AI,
+  pattern architetturali (`Knowledge/Patterns/`), snippet di codice
+  (`Knowledge/Snippets/`).
+- `Prompts/` — prompt riutilizzabili, non legati a un progetto specifico.
+- `Templates/` — scheletri di progetto e template di documenti.
+- `Resources/` — documentazione esterna, PDF, libri, datasheet.
+- `Journal/` — note giornaliere e idee.
+- `Inbox/` — appunti veloci da classificare.
+- `Archive/` — materiale non più attivo.
+- `System/` — standard e convenzioni per gli agenti AI.
+- `Identity/` — contesto personale, preferenze.
+
 ## Priorità delle fonti
-1. Brain (questa knowledge base)
-2. Documentazione del progetto specifico
-3. Codice del progetto
-4. Internet (solo se le prime tre fonti non bastano)
+1. Progetto corrente (`Projects/<NomeProgetto>/`)
+2. Conoscenza generale (`Knowledge/`)
+3. Altri progetti (`Projects/`), per analogie o problemi già affrontati altrove
+4. Documentazione e codice del progetto specifico (nel repository del progetto,
+   fuori dal vault)
+5. Internet (solo se le fonti precedenti non bastano)
 
 ## Prima di rispondere, l'agente deve:
 1. Comprendere il contesto della richiesta.
-2. Identificare il progetto pertinente in 02_Projects/.
-3. Recuperare la documentazione pertinente.
-4. Leggere gli standard in 00_System/.
-5. Analizzare le decisioni precedenti in 08_Decisions/.
-6. Verificare bug già risolti in 09_Bugs/.
-7. Produrre la risposta.
+2. Identificare il progetto pertinente in `Projects/`.
+3. Recuperare decisioni e bug pertinenti (`Projects/<NomeProgetto>/Decisions.md`,
+   `Bugs.md`).
+4. Cercare in `Knowledge/` pattern, snippet o appunti riutilizzabili.
+5. Se necessario, verificare se altri progetti hanno affrontato un problema simile.
+6. Leggere gli standard in `System/`.
+7. Produrre la risposta, segnalando se un'informazione andrebbe "promossa" da un
+   progetto a `Knowledge/` perché riutilizzabile altrove.
 EOF
 ```
 
@@ -426,9 +451,11 @@ git add .
 git commit -m "Inizializzazione struttura Brain"
 ```
 
+> Nota: `Projects/` parte vuota. Ogni volta che avvii un nuovo progetto, crea al suo interno una sottocartella con `README.md`, `Architecture.md`, `Decisions.md`, `Bugs.md` e `Roadmap.md` (vedi il file di riferimento sulla logica del vault per un esempio completo).
+
 ### Verifica
 ```bash
-find /data/brain/vault -maxdepth 1 -type d
+find /data/brain/vault -maxdepth 2 -type d
 cd /data/brain/vault && git log --oneline
 ```
 
@@ -750,7 +777,7 @@ In tutti i casi, i path (`/data/brain/...`, `/data/docker/...`) e i nomi dei con
 - [ ] `/data` montato in modo persistente, struttura cartelle creata (Fase 3)
 - [ ] Docker installato e funzionante (Fase 4)
 - [ ] IP del PC reso stabile tramite riserva DHCP (Fase 5)
-- [ ] Struttura completa del vault creata in `/data/brain/vault`, con `AGENTS.md` e Git inizializzato (Fase 6)
+- [ ] Struttura completa del vault creata in `/data/brain/vault` (`Projects/`, `Knowledge/`, ecc.), con `AGENTS.md` e Git inizializzato (Fase 6)
 - [ ] Ollama installato e almeno un modello scaricato (Fase 9)
 - [ ] Open WebUI avviato e raggiungibile su `http://<ip-server>:3000` (Fase 10)
 - [ ] Obsidian collegato al vault (Fase 11)
