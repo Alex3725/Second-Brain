@@ -1,48 +1,30 @@
-# 02 — Second Brain Casalingo (Versione Semplificata)
+# 02 — Homelab con Proxmox: Fondamenta (BrainOS + NAS)
 
-> Questa guida è la **versione semplificata** di `Claude-02.md` (File 03 — Guida Completa all'Implementazione). Copre solo le Fasi necessarie per un uso puramente domestico: un solo utente, accesso solo da rete locale, nessuna VPN, nessun reverse proxy, nessun database applicativo/vettoriale (ancora).
+> Questa è la versione **Proxmox** della guida domestica. Sostituisce la versione precedente basata su Ubuntu Server "nudo": qui **Proxmox VE è l'hypervisor dell'host**, e sia BrainOS sia il NAS vivono in VM/container separati sopra di esso. Questo perché hai indicato di voler far crescere l'homelab nel tempo (nuovi servizi, nuove VM) — Proxmox è pensato esattamente per questo.
 >
-> **Punto fondamentale:** questa guida usa **esattamente gli stessi path, gli stessi nomi dei container e la stessa numerazione delle Fasi** della guida completa. Non è una guida "diversa e più semplice" — è la guida completa con alcune Fasi saltate. Questo significa che il giorno in cui vorrai passare a `Claude-02.md` per aggiungere VPN, database, reverse proxy o ricerca semantica, **non dovrai spostare file, rinominare cartelle o rifare nulla**: basta riprendere dalla Fase successiva a quella in cui questa guida si ferma.
+> **Continuità con `Claude-02.md`:** tutta la parte Docker/BrainOS descritta in `Claude-02.md` (Fasi 4, 6, 7, 8, 9, 10, 15, ecc.) resta valida **parola per parola** — semplicemente non gira più sull'host fisico, ma dentro la VM dedicata creata alla Fase 4 di questa guida. Dove in `Claude-02.md` leggi "sul server" o "sull'host", intendi "dentro la VM BrainOS". I path (`/data/brain/...`, `/data/docker/...`) e i nomi dei container restano identici.
 
 ---
 
-## Cosa include questa guida rispetto a Claude-02
+## Cosa costruiamo
 
-| Fase | Titolo | In questa guida (01) | In Claude-02 (versione completa) |
-|---|---|---|---|
-| 0 | Pianificazione | ✅ Semplificata | ✅ Completa |
-| 1 | Installazione sistema operativo | ✅ Uguale | ✅ Uguale |
-| 2 | Accesso remoto SSH | ✅ Opzionale, comandi uguali | ✅ Uguale |
-| 3 | Configurazione storage (`/data`) | ✅ Uguale | ✅ Uguale |
-| 4 | Docker e Docker Compose | ✅ Uguale | ✅ Uguale |
-| 5 | Rete locale / DNS | ✅ Solo riserva DHCP | ✅ Anche DNS locale (Technitium) |
-| 6 | Struttura cartelle del Brain | ✅ Uguale (stessa struttura `Projects/` + `Knowledge/`) | ✅ Uguale |
-| 7 | Database applicativo (Postgres) | ⏭️ Saltata | ✅ Presente |
-| 8 | Database vettoriale (ChromaDB) | ⏭️ Saltata | ✅ Presente |
-| 9 | AI locale (Ollama) | ✅ Uguale | ✅ Uguale |
-| 10 | Interfaccia AI (Open WebUI) | ✅ Uguale | ✅ Uguale |
-| 11 | Vault Obsidian | ✅ Versione locale semplice | ✅ Anche sync multi-dispositivo via Git |
-| 12 | VPN (accesso da fuori casa) | ⏭️ Saltata | ✅ Presente |
-| 13 | Reverse proxy | ⏭️ Saltata | ✅ Presente (opzionale anche lì) |
-| 14 | Test end-to-end | ✅ Versione ridotta | ✅ Completa |
-| 15 | Backup | ✅ Uguale | ✅ Uguale |
-| 16 | Manutenzione | ✅ Cenni | ✅ Completa |
-| 17 | Automazioni future | ✅ Cenni | ✅ Completa |
-
-Le Fasi 7, 8, 12 e 13, quando vorrai attivarle, si trovano già pronte e invariate in `Claude-02.md`: puoi copiare i comandi da lì senza dover adattare nulla, perché i path (`/data/brain/...`, `/data/docker/...`) e i nomi dei container (`brainos-*`) sono identici.
-
----
-
-## Scenario di riferimento
-
-| Requisito | Valore |
-|---|---|
-| Utenti | Uno solo (tu) |
-| Accesso da Internet | ❌ Nessuno (per ora — si aggiunge in Claude-02, Fase 12) |
-| Dominio pubblico | ❌ Nessuno |
-| Database applicativo/vettoriale | ❌ Non ancora (si aggiunge in Claude-02, Fasi 7-8) |
-| Accesso dal PC principale | ✅ Sì |
-| Accesso dagli altri PC/telefoni di casa (LAN) | ✅ Sì |
+```
+Hardware fisico (il tuo PC/mini PC)
+         │
+     Proxmox VE (hypervisor)
+         │
+   ┌─────┼──────────────┬──────────────────┐
+   │                     │                  │
+VM "brainos"        LXC "nas"          (future VM/LXC:
+Ubuntu Server        Samba/NFS          Home Assistant,
++ Docker             + SSD esterno       altri esperimenti,
++ stack BrainOS      passthrough         ecc.)
+(Ollama, Open WebUI,
+ vault, ecc.)
+         │
+   Tailscale (VPN) sull'host Proxmox
+   → accesso remoto a VM e LXC da fuori casa
+```
 
 ---
 
@@ -50,741 +32,441 @@ Le Fasi 7, 8, 12 e 13, quando vorrai attivarle, si trovano già pronte e invaria
 
 | Fase | Titolo |
 |---|---|
-| 0 | Pianificazione e scelte preliminari |
-| 1 | Installazione del sistema operativo |
-| 2 | Accesso remoto (SSH) — opzionale |
-| 3 | Configurazione dello storage |
-| 4 | Installazione di Docker e Docker Compose |
-| 5 | Rete locale e nome host |
-| 6 | Struttura delle cartelle del Brain |
-| 9 | AI locale con Ollama |
-| 10 | Interfaccia AI (Open WebUI) |
-| 11 | Vault Obsidian (versione locale) |
-| 14 | Test end-to-end (versione ridotta) |
-| 15 | Backup |
-
-> Nota: i numeri delle Fasi 7, 8, 12, 13, 16, 17 non compaiono in questa guida di proposito — sono riservati alle sezioni corrispondenti di `Claude-02.md`, per mantenere la numerazione identica tra le due guide.
+| 0 | Pianificazione e decisioni |
+| 1 | Installazione di Proxmox VE |
+| 2 | Accesso alla Web UI e SSH dell'host |
+| 3 | Storage: disco di sistema e SSD esterno per il NAS |
+| 4 | Decisione e creazione: dove gira BrainOS (VM vs LXC) |
+| 5 | Rete: bridge Proxmox e IP statici |
+| 6 | Struttura del Brain dentro la VM (rimando a Claude-02) |
+| 7 | NAS: LXC dedicato con SSD esterno per foto/video |
+| 8 | VPN centralizzata (Tailscale sull'host Proxmox) |
+| 9 | Backup (VM/LXC + dati NAS) |
 
 ---
 
-## Fase 0 — Pianificazione e scelte preliminari
+## Fase 0 — Pianificazione e decisioni
 
 ### Obiettivo
-Definire con chiarezza cosa si sta costruendo, in versione domestica minima.
+Decidere la struttura prima di installare qualunque cosa, per evitare di dover smontare macchine virtuali già in uso.
 
 ### Cosa fare
-1. Decidi quale macchina userai: può essere il tuo PC principale (usato anche per altro) oppure un PC/mini PC dedicato, sempre acceso.
-2. Prepara una chiavetta USB da almeno 8 GB per l'immagine di installazione, **solo se** installerai Ubuntu Server da zero. Se il PC ha già un sistema operativo che vuoi tenere, vedi la nota nella Fase 1.
-3. Scarica l'immagine ISO di **Ubuntu Server 24.04 LTS** da `ubuntu.com/download/server`.
-
-### Comandi
-Nessun comando in questa fase: è puramente decisionale.
+1. Conferma l'hardware che diventerà l'host Proxmox (PC/mini PC sempre acceso).
+2. Prevedi almeno **due dischi**: uno interno per Proxmox + le VM (idealmente SSD, 128 GB+), e un **SSD esterno USB dedicato al NAS** (foto, video, backup) — quello che vuoi usare per lo spazio NAS.
+3. Decidi la RAM da riservare: Proxmox stesso ha bisogno di poca RAM (1-2 GB), il resto va diviso tra la VM BrainOS e l'LXC NAS. Con 16 GB totali, un'allocazione ragionevole è: Proxmox host ~2 GB, VM BrainOS 6-8 GB, LXC NAS 1-2 GB, margine libero per altre VM future.
 
 ### Configurazione
-Annota, prima di iniziare:
-- Nome host del PC (es. `brainos-server`)
-- Nome utente amministratore
-- Se userai un disco esterno per i dati (consigliato, vedi Fase 3) o solo il disco interno
+Annota prima di iniziare:
+- Nome host dell'host Proxmox (es. `pve-home`)
+- IP che vuoi assegnare all'host Proxmox (es. `192.168.1.10`)
+- Quale disco farà da storage NAS (l'SSD esterno)
 
 ### Verifica
-- [ ] Hai deciso quale PC userai
-- [ ] Hai l'immagine ISO scaricata (se necessaria)
-
-### Problemi comuni
-| Problema | Causa |
-|---|---|
-| Non sai quale versione di Ubuntu scaricare | Usa sempre la versione LTS più recente |
-
-### Come risolverli
-Scarica esclusivamente da `ubuntu.com`, versione "Server" (non "Desktop").
+- [ ] Hai chiaro quale disco è "sistema" e quale è "dati NAS"
+- [ ] Hai un piano di allocazione RAM approssimativo
 
 ### Cosa fare dopo
 Procedi alla Fase 1.
 
 ---
 
-## Fase 1 — Installazione del sistema operativo
+## Fase 1 — Installazione di Proxmox VE
 
 ### Obiettivo
-Avere Ubuntu funzionante sul PC scelto.
+Installare Proxmox VE come sistema operativo dell'host, al posto di Ubuntu Server.
 
 ### Cosa fare
-1. Se stai installando da zero: scrivi l'ISO sulla chiavetta USB (Balena Etcher / Rufus su Windows, `dd` su Linux/macOS) e avvia il PC da USB.
-2. Segui la procedura guidata: lingua, tastiera, rete (DHCP automatico va bene), disco, utente amministratore, nome host.
-3. Nella schermata "Featured Server Snaps", abilita **OpenSSH Server** (utile anche solo per comodità, vedi Fase 2).
-4. Completa l'installazione e riavvia.
-
-> 💡 **Alternativa più semplice**: se preferisci non reinstallare il sistema operativo, puoi seguire questa guida anche su un PC con **Ubuntu Desktop, Windows o macOS** già installato, usando direttamente Docker Desktop invece di Docker Engine. In tal caso i comandi restano quasi identici, ma alcuni passaggi (es. `systemctl`, installazione via `apt`) non si applicano — usa l'interfaccia grafica di Docker Desktop al loro posto. Per la massima compatibilità futura con `Claude-02.md` (pensata per Ubuntu Server), l'opzione consigliata resta comunque Ubuntu.
+1. Scarica l'ISO di **Proxmox VE** (ultima versione stabile) da `proxmox.com/downloads`.
+2. Scrivi l'ISO su una chiavetta USB (Balena Etcher/Rufus su Windows, `dd` su Linux/macOS).
+3. Avvia il PC da USB e segui l'installer grafico di Proxmox:
+   - Disco di destinazione: **solo il disco interno** (non l'SSD esterno che riservi al NAS)
+   - Paese/fuso orario/tastiera
+   - Password di root e email amministrativa
+   - Configurazione di rete: IP statico (usa quello annotato alla Fase 0), gateway = IP del router, DNS = IP del router o `1.1.1.1`
+4. Completa l'installazione e riavvia, rimuovendo la chiavetta.
 
 ### Comandi
 ```bash
 # Scrittura ISO su USB da terminale Linux/macOS (sostituisci /dev/sdX con il device corretto)
-sudo dd if=ubuntu-24.04-live-server-amd64.iso of=/dev/sdX bs=4M status=progress oflag=sync
+sudo dd if=proxmox-ve_8.x.iso of=/dev/sdX bs=4M status=progress oflag=sync
 ```
 
-> ⚠️ Presta **estrema attenzione** al device di destinazione: un errore può cancellare dati da un altro disco.
-
-### Configurazione
-- Nome host: es. `brainos-server`
-- Nome utente: a tua scelta
-- OpenSSH Server: consigliato attivo
+> ⚠️ Presta attenzione al device di destinazione: un errore può cancellare dati da un altro disco. **Non collegare ancora l'SSD esterno del NAS durante l'installazione**, per evitare di selezionarlo per errore come disco di sistema.
 
 ### Verifica
-Al riavvio, prompt di login testuale con il nome host scelto.
+Al riavvio, la console mostra l'URL della Web UI, del tipo:
+```
+https://192.168.1.10:8006
+```
 
 ### Problemi comuni
 | Problema | Causa probabile |
 |---|---|
-| Il PC non avvia dalla chiavetta USB | Ordine di boot nel BIOS/UEFI non corretto, o Secure Boot attivo |
+| Il PC non avvia dalla USB | Ordine di boot nel BIOS/UEFI non corretto, o Secure Boot attivo |
+| Proxmox non vede il disco giusto | Più dischi collegati contemporaneamente durante l'installazione |
 
 ### Come risolverli
-Entra nel BIOS/UEFI (F2/Del all'accensione), imposta l'avvio da USB come priorità, disabilita temporaneamente Secure Boot se necessario.
+Entra nel BIOS/UEFI, imposta l'avvio da USB, disabilita Secure Boot se necessario. Se hai selezionato il disco sbagliato, reinstalla dopo aver scollegato l'SSD del NAS.
 
 ### Cosa fare dopo
-Procedi alla Fase 2 (opzionale) o direttamente alla Fase 3.
+Procedi alla Fase 2.
 
 ---
 
-## Fase 2 — Accesso remoto (SSH) — opzionale
+## Fase 2 — Accesso alla Web UI e SSH dell'host
 
 ### Obiettivo
-Poter amministrare il PC da un altro dispositivo senza monitor/tastiera collegati. Utile ma non obbligatorio se lavori sempre direttamente sul PC.
+Amministrare Proxmox comodamente da un browser e, se serve, da terminale.
 
 ### Cosa fare
-1. Trova l'IP del PC.
-2. Connettiti via SSH da un altro dispositivo della rete.
+1. Da un PC della stessa rete, apri il browser su `https://192.168.1.10:8006` (il certificato è self-signed: accetta l'avviso di sicurezza).
+2. Accedi con utente `root` e la password scelta in Fase 1.
+3. (Opzionale) Connettiti via SSH per operazioni da riga di comando.
 
 ### Comandi
-Sul PC, per vedere l'IP:
 ```bash
-ip addr show
+ssh root@192.168.1.10
 ```
-
-Da un altro PC:
-```bash
-ssh brainadmin@192.168.1.50
-```
-
-### Configurazione
-Alias comodo su `~/.ssh/config` (Linux/macOS):
-```text
-Host brainos
-    HostName 192.168.1.50
-    User brainadmin
-```
-Poi: `ssh brainos`
 
 ### Verifica
-Dopo la connessione, vedi il prompt del PC (es. `brainadmin@brainos-server:~$`).
+- [ ] La Web UI di Proxmox si apre e mostra il nodo host nel pannello di sinistra
+- [ ] L'accesso SSH funziona
 
 ### Problemi comuni
 | Problema | Causa |
 |---|---|
-| `Connection refused` | Servizio SSH non attivo |
-| `Connection timed out` | Firewall blocca la porta 22, o IP errato |
-
-### Come risolverli
-```bash
-sudo systemctl status ssh
-sudo systemctl enable --now ssh
-sudo ufw allow OpenSSH
-```
+| "La tua connessione non è privata" nel browser | Normale: Proxmox usa un certificato self-signed. Puoi procedere in sicurezza in rete locale, o sostituirlo in seguito con Let's Encrypt |
 
 ### Cosa fare dopo
 Procedi alla Fase 3.
 
 ---
 
-## Fase 3 — Configurazione dello storage
+## Fase 3 — Storage: disco di sistema e SSD esterno per il NAS
 
 ### Obiettivo
-Separare **sistema** e **dati**, così da poter reinstallare il sistema operativo in futuro senza perdere il Brain. Stessa identica struttura di `Claude-02.md`.
+Preparare in Proxmox sia lo storage per le VM/LXC sia lo storage dedicato al NAS, tenendoli separati.
 
 ### Cosa fare
-1. Collega un SSD esterno USB (o un secondo disco interno).
-2. Identificalo, formattalo e montalo in modo persistente usando l'UUID.
+1. Collega ora l'SSD esterno che userai per il NAS.
+2. In Proxmox, aggiungilo come storage dedicato, separato da quello di sistema.
 
 ### Comandi
+Identifica il disco appena collegato:
 ```bash
-# Elenca tutti i dischi collegati
 lsblk
+```
 
-# Supponendo che il nuovo disco sia /dev/sdb, crea una partizione
-sudo fdisk /dev/sdb
-# All'interno di fdisk: n -> invio per i default -> w
+Se vuoi passarlo come disco intero a un LXC/VM (consigliato per semplicità), non serve formattarlo da Proxmox: lo formatterai dentro il container/VM che lo userà (vedi Fase 7). Se invece preferisci gestirlo direttamente dall'host come directory storage:
 
-# Formatta in ext4
+```bash
+# Formatta in ext4 (solo se il disco è nuovo/vuoto)
 sudo mkfs.ext4 /dev/sdb1
 
 # Crea il punto di mount
-sudo mkdir -p /data
+sudo mkdir -p /mnt/nas-ssd
 
 # Trova l'UUID
 sudo blkid /dev/sdb1
 ```
 
-### Configurazione
-Apri `/etc/fstab`:
-```bash
-sudo nano /etc/fstab
-```
-Aggiungi (sostituendo `UUID-DEL-TUO-DISCO`):
+Aggiungi a `/etc/fstab` (host Proxmox):
 ```text
-UUID=UUID-DEL-TUO-DISCO   /data   ext4   defaults   0   2
+UUID=UUID-DEL-TUO-DISCO   /mnt/nas-ssd   ext4   defaults   0   2
 ```
-Monta subito senza riavviare:
 ```bash
 sudo mount -a
 ```
 
-Crea la struttura dati (**identica a Claude-02**, incluse le cartelle che per ora resteranno vuote — `vectors` e `database` verranno usate quando attiverai le Fasi 7-8):
-```bash
-sudo mkdir -p /data/brain/vault /data/brain/vectors /data/brain/database /data/brain/cache
-sudo mkdir -p /data/git /data/backups /data/docker
-sudo chown -R $USER:$USER /data
-```
+Registra la cartella come storage Proxmox (Web UI): **Datacenter → Storage → Add → Directory**, puntando a `/mnt/nas-ssd`. In questo modo diventa selezionabile anche per backup delle VM, non solo per il NAS.
 
 ### Verifica
 ```bash
-df -h /data
-ls -la /data
+df -h /mnt/nas-ssd
 ```
-Dovresti vedere le cartelle `brain`, `git`, `backups`, `docker`.
+E nella Web UI: **Datacenter → Storage** deve mostrare il nuovo storage con lo spazio disponibile corretto.
 
 ### Problemi comuni
 | Problema | Causa |
 |---|---|
-| Il sistema non si avvia dopo aver modificato `fstab` | Errore di sintassi o UUID sbagliato |
-| `mount -a` restituisce errore | UUID errato o filesystem non corrispondente |
-
-### Come risolverli
-Se il sistema non si avvia, usa la shell di emergenza offerta da Ubuntu (Ctrl+D o modalità recovery) e correggi `/etc/fstab`.
-
-> 💡 Testa sempre con `sudo mount -a` prima di riavviare dopo una modifica a `fstab`.
+| L'SSD esterno non è riconosciuto | Cavo/porta USB difettosi, o disco con filesystem non supportato |
+| Lo storage non appare nella Web UI dopo il mount | Manca la registrazione manuale in Datacenter → Storage |
 
 ### Cosa fare dopo
 Procedi alla Fase 4.
 
 ---
 
-## Fase 4 — Installazione di Docker e Docker Compose
+## Fase 4 — Decisione e creazione: dove gira BrainOS
 
 ### Obiettivo
-Installare il motore che ospiterà i servizi in container.
+Scegliere consapevolmente come isolare lo stack BrainOS (Docker + Ollama + Open WebUI + vault), non solo "farlo partire".
+
+### Le opzioni
+
+| Opzione | Vantaggi | Svantaggi | Quando conviene |
+|---|---|---|---|
+| **VM dedicata (Ubuntu Server 24.04) con Docker dentro** — consigliata | Isolamento completo dal kernel host, snapshot Proxmox a livello di intera VM, nessun problema di compatibilità Docker (Docker richiede funzionalità del kernel che in LXC non privilegiati spesso mancano o vanno forzate), puoi spostarla su un altro nodo Proxmox in futuro | Overhead di RAM/CPU per il proprio kernel (qualche centinaio di MB in più rispetto a un LXC) | Scelta di default per un homelab che vuoi far crescere in sicurezza — è anche quella su cui è scritta tutta `Claude-02.md` |
+| **LXC privilegiato con Docker dentro** | Più leggero, avvio quasi istantaneo, meno RAM sprecata | Richiede LXC *privilegiato* con nesting abilitato (perdi parte dell'isolamento che rende gli LXC sicuri), alcuni plugin di rete Docker possono dare problemi dentro LXC | Solo se l'hardware è davvero limitato (es. 8 GB RAM totali) e accetti il compromesso |
+| **Bare metal sull'host Proxmox stesso** | Zero overhead | Mischi il ruolo di hypervisor con quello di servizio applicativo: un crash di un container Docker può impattare la stabilità dell'host che gestisce tutte le altre VM. Sconsigliato in un homelab pensato per espandersi | Da evitare |
+
+**Raccomandazione:** VM dedicata. È la scelta più solida per un homelab che vuoi espandere (come hai detto tu stesso), permette snapshot/rollback di tutta la VM da Proxmox stesso, e ti consente di riprendere `Claude-02.md` senza alcun adattamento: quella guida presuppone proprio Ubuntu Server + Docker su una macchina dedicata.
 
 ### Cosa fare
-Installa Docker Engine e il plugin Docker Compose (procedura ufficiale Ubuntu — identica a Claude-02).
+Crea una VM Ubuntu Server 24.04 dedicata a BrainOS.
 
-### Comandi
-```bash
-sudo apt update
-sudo apt install -y ca-certificates curl gnupg
-sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-sudo chmod a+r /etc/apt/keyrings/docker.gpg
-
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-  $(. /etc/os-release && echo $VERSION_CODENAME) stable" | \
-  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-sudo apt update
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
-sudo usermod -aG docker $USER
-```
-
-Disconnettiti e riconnettiti perché il gruppo abbia effetto:
-```bash
-exit
-ssh brainos
-```
-(oppure, se lavori direttamente sul PC senza SSH, disconnetti/riconnetti la sessione utente o riavvia)
-
-### Configurazione
-```bash
-sudo systemctl enable docker
-```
+### Comandi / Configurazione (Web UI Proxmox)
+1. **Create VM** in alto a destra.
+2. **General**: Nome `brainos`.
+3. **OS**: carica l'ISO di Ubuntu Server 24.04 (caricala prima in Datacenter → Storage locale → ISO Images, scaricandola da `ubuntu.com/download/server`).
+4. **System**: lascia i default (Machine: q35, BIOS: OVMF se vuoi UEFI, altrimenti SeaBIOS va bene).
+5. **Disks**: assegna almeno 32 GB sullo storage di sistema (non sull'SSD del NAS).
+6. **CPU**: 2-4 core.
+7. **Memory**: 6-8 GB (in base al piano fatto in Fase 0).
+8. **Network**: bridge `vmbr0` (la rete di default, ponte verso la tua LAN).
+9. Conferma e avvia la VM, poi installa Ubuntu Server come già descritto nelle guide precedenti (utente, password, OpenSSH abilitato).
 
 ### Verifica
-```bash
-docker --version
-docker compose version
-docker run hello-world
-```
+- [ ] La VM `brainos` è visibile e in stato "Running" nella Web UI di Proxmox
+- [ ] Riesci a fare SSH dentro la VM dal tuo PC principale, con un IP nella stessa LAN (es. `192.168.1.51`)
 
 ### Problemi comuni
 | Problema | Causa |
 |---|---|
-| `permission denied` eseguendo `docker` | L'utente non è (ancora) nel gruppo `docker`, manca logout/login |
-| `docker: command not found` | Installazione non completata |
+| La VM non parte / errore "KVM not supported" | Virtualizzazione (VT-x/AMD-V) non abilitata nel BIOS dell'host |
+| Nessuna rete dentro la VM | Bridge di rete sbagliato selezionato in fase di creazione |
 
 ### Come risolverli
-```bash
-groups
-sudo usermod -aG docker $USER
-```
+Abilita VT-x/AMD-V nel BIOS/UEFI dell'host. Verifica in Proxmox che l'interfaccia della VM sia collegata a `vmbr0`.
 
 ### Cosa fare dopo
-Procedi alla Fase 5.
+Procedi alla Fase 5. Da qui in poi, **tutto quello che riguarda Docker, Ollama, Open WebUI, la struttura del vault e il backup del Brain va eseguito dentro la VM `brainos`**, seguendo `Claude-02.md` dalla Fase 3 in poi (storage interno alla VM) — oppure, se vuoi la sequenza già ridotta per uso domestico, la versione semplificata che avevamo preparato prima, sempre eseguita dentro questa VM invece che sull'host fisico.
 
 ---
 
-## Fase 5 — Rete locale e nome host
+## Fase 5 — Rete: bridge Proxmox e IP statici
 
 ### Obiettivo
-Rendere il PC sempre raggiungibile con lo stesso indirizzo IP.
+Avere IP prevedibili sia per l'host Proxmox sia per la VM BrainOS e il futuro LXC NAS.
 
 ### Cosa fare
-Configura una **riserva DHCP** sul router per il PC.
-
-> Il DNS locale (Technitium, nomi tipo `brain.local`) è **facoltativo** ed è descritto in `Claude-02.md`, Fase 5: puoi aggiungerlo in qualsiasi momento senza toccare nulla di quanto fatto qui.
-
-### Comandi
-Trova l'indirizzo MAC:
-```bash
-ip link show
-```
+1. Assicurati che host, VM `brainos` e (a breve) LXC `nas` abbiano tutti IP statici o riservati via DHCP, sulla stessa LAN.
 
 ### Configurazione
-1. Accedi al pannello del router (es. `http://192.168.1.1`).
-2. Cerca "DHCP Reservation" o "IP statico via DHCP".
-3. Associa il MAC address del PC a un IP fisso (es. `192.168.1.50`).
-4. Salva.
+Nel router, aggiungi una riserva DHCP per ciascun MAC address (host Proxmox, VM brainos, LXC nas), oppure assegna IP statici direttamente dentro Ubuntu Server (VM) e dentro l'LXC.
+
+Esempio di piano IP:
+| Dispositivo | IP |
+|---|---|
+| Host Proxmox | `192.168.1.10` |
+| VM `brainos` | `192.168.1.51` |
+| LXC `nas` | `192.168.1.52` |
 
 ### Verifica
 ```bash
-ping 192.168.1.50
+ping 192.168.1.10
+ping 192.168.1.51
 ```
-L'IP deve restare lo stesso anche dopo un riavvio del PC.
-
-### Problemi comuni
-| Problema | Causa |
-|---|---|
-| L'IP cambia comunque | Riserva DHCP non salvata correttamente, o router non supportato |
-
-### Come risolverli
-Verifica nel pannello del router che la riserva sia effettivamente elencata e attiva.
+Entrambi devono rispondere in modo stabile anche dopo un riavvio.
 
 ### Cosa fare dopo
 Procedi alla Fase 6.
 
 ---
 
-## Fase 6 — Struttura delle cartelle del Brain
+## Fase 6 — Struttura del Brain dentro la VM
 
 ### Obiettivo
-Preparare la struttura dati completa del vault — **identica a Claude-02**. La logica alla base è separare due tipi di memoria:
-
-- **`Projects/`** → memoria di progetto: documentazione, decisioni, bug e roadmap che appartengono a un progetto specifico e, se apri un nuovo progetto, probabilmente non ti interessano.
-- **`Knowledge/`** → memoria personale riutilizzabile: appunti di programmazione, pattern, snippet, convenzioni. Cresce nel tempo e vale per qualsiasi progetto.
-
-Le vecchie cartelle globali `08_Decisions` e `09_Bugs` non esistono più come cartelle a sé: decisioni e bug vivono dentro `Projects/<NomeProgetto>/`, perché appartengono sempre a qualcosa di specifico. Quando una decisione o un pattern nato in un progetto si rivela riutilizzabile ovunque, lo **promuovi** spostandolo in `Knowledge/` e lasci un collegamento nel progetto originale.
+Non duplicare contenuto: questa fase è **identica** a quanto già descritto in `Claude-02.md` (Fase 6) o nella guida domestica semplificata, con l'unica differenza che i comandi vanno eseguiti dentro la VM `brainos` invece che sull'host fisico.
 
 ### Cosa fare
-Crea la struttura completa dentro `/data`, già montata nella Fase 3.
-
-### Comandi
-```bash
-mkdir -p /data/brain/vault/{System,Identity,Projects,Prompts,Templates,Resources,Journal,Inbox,Archive}
-mkdir -p /data/brain/vault/Knowledge/{Programming,DevOps,AI,Patterns,Snippets}
-
-touch /data/brain/vault/AGENTS.md
-
-mkdir -p /data/brain/vectors
-mkdir -p /data/brain/database
-mkdir -p /data/brain/cache
-mkdir -p /data/git
-mkdir -p /data/backups
-mkdir -p /data/docker
-```
-
-### Configurazione
-Popola `AGENTS.md`:
-```bash
-cat > /data/brain/vault/AGENTS.md << 'EOF'
-# AGENTS.md
-
-Punto di ingresso per qualsiasi agente AI collegato a questo Brain.
-
-## Struttura del vault
-- `Projects/` — memoria di progetto: documentazione, decisioni, bug e roadmap
-  specifici di ciascun progetto (in `Projects/<NomeProgetto>/`).
-- `Knowledge/` — memoria personale riutilizzabile: programmazione, DevOps, AI,
-  pattern architetturali (`Knowledge/Patterns/`), snippet di codice
-  (`Knowledge/Snippets/`).
-- `Prompts/` — prompt riutilizzabili, non legati a un progetto specifico.
-- `Templates/` — scheletri di progetto e template di documenti.
-- `Resources/` — documentazione esterna, PDF, libri, datasheet.
-- `Journal/` — note giornaliere e idee.
-- `Inbox/` — appunti veloci da classificare.
-- `Archive/` — materiale non più attivo.
-- `System/` — standard e convenzioni per gli agenti AI.
-- `Identity/` — contesto personale, preferenze.
-
-## Priorità delle fonti
-1. Progetto corrente (`Projects/<NomeProgetto>/`)
-2. Conoscenza generale (`Knowledge/`)
-3. Altri progetti (`Projects/`), per analogie o problemi già affrontati altrove
-4. Documentazione e codice del progetto specifico (nel repository del progetto,
-   fuori dal vault)
-5. Internet (solo se le fonti precedenti non bastano)
-
-## Prima di rispondere, l'agente deve:
-1. Comprendere il contesto della richiesta.
-2. Identificare il progetto pertinente in `Projects/`.
-3. Recuperare decisioni e bug pertinenti (`Projects/<NomeProgetto>/Decisions.md`,
-   `Bugs.md`).
-4. Cercare in `Knowledge/` pattern, snippet o appunti riutilizzabili.
-5. Se necessario, verificare se altri progetti hanno affrontato un problema simile.
-6. Leggere gli standard in `System/`.
-7. Produrre la risposta, segnalando se un'informazione andrebbe "promossa" da un
-   progetto a `Knowledge/` perché riutilizzabile altrove.
-EOF
-```
-
-Inizializza Git nel vault:
-```bash
-cd /data/brain/vault
-git init
-git add .
-git commit -m "Inizializzazione struttura Brain"
-```
-
-> Nota: `Projects/` parte vuota. Ogni volta che avvii un nuovo progetto, crea al suo interno una sottocartella con `README.md`, `Architecture.md`, `Decisions.md`, `Bugs.md` e `Roadmap.md` (vedi il file di riferimento sulla logica del vault per un esempio completo).
-
-### Verifica
-```bash
-find /data/brain/vault -maxdepth 2 -type d
-cd /data/brain/vault && git log --oneline
-```
-
-### Problemi comuni
-| Problema | Causa |
-|---|---|
-| `git commit` fallisce chiedendo nome/email | Git non configurato globalmente |
-
-### Come risolverli
-```bash
-git config --global user.name "Il Tuo Nome"
-git config --global user.email "tua-email@esempio.com"
-```
+1. Fai SSH dentro la VM: `ssh brainadmin@192.168.1.51`
+2. Segui da qui `Claude-02.md`, Fasi 3 (storage interno alla VM, es. `/data`), 4 (Docker), 6 (struttura cartelle), 9 (Ollama), 10 (Open WebUI), 15 (backup) — parola per parola, nessun path cambia.
 
 ### Cosa fare dopo
-Procedi alla Fase 9 per l'AI locale. (Le Fasi 7 e 8 — database applicativo e vettoriale — sono facoltative in questa versione domestica: le trovi pronte, con gli stessi path, in `Claude-02.md`.)
+Una volta che BrainOS gira correttamente dentro la VM, procedi alla Fase 7 per il NAS.
 
 ---
 
-## Fase 9 — AI locale con Ollama
+## Fase 7 — NAS: LXC dedicato con SSD esterno per foto/video
 
 ### Obiettivo
-Installare il runtime AI locale.
+Creare un piccolo spazio di rete per salvare foto, video e altri file personali, separato da BrainOS, usando l'SSD esterno preparato in Fase 3.
 
 ### Cosa fare
-Installa Ollama direttamente sul sistema host.
+Crea un container LXC leggero con Samba, e passa (o monta) l'SSD esterno al suo interno.
 
-### Comandi
+### Comandi / Configurazione (Web UI Proxmox)
+1. **Create CT** (container LXC).
+2. **General**: Nome `nas`, imposta una password.
+3. **Template**: Debian 12 (leggero, ottimo per questo scopo).
+4. **Disks**: 4-8 GB bastano per il sistema dell'LXC (i dati veri stanno sull'SSD esterno, montato come bind mount, vedi sotto).
+5. **CPU**: 1 core. **Memory**: 512 MB - 1 GB.
+6. **Network**: bridge `vmbr0`, IP statico (es. `192.168.1.52`, vedi Fase 5).
+
+Dopo la creazione, per **passare l'SSD esterno all'LXC come bind mount** (se in Fase 3 l'hai montato su `/mnt/nas-ssd` dell'host), modifica la configurazione del container dall'host Proxmox:
 ```bash
-curl -fsSL https://ollama.com/install.sh | sh
-ollama --version
-ollama pull llama3.1:8b
-ollama run llama3.1:8b "Rispondi con una sola parola: funzioni?"
+nano /etc/pve/lxc/<ID-CONTAINER>.conf
 ```
-
-### Configurazione
-Per renderlo raggiungibile da Open WebUI (Fase 10) e da altri dispositivi della LAN:
-```bash
-sudo systemctl edit ollama.service
-```
-Aggiungi:
-```ini
-[Service]
-Environment="OLLAMA_HOST=0.0.0.0:11434"
-```
-Riavvia:
-```bash
-sudo systemctl daemon-reload
-sudo systemctl restart ollama
-```
-
-### Verifica
-```bash
-ollama list
-```
-Dal PC principale (rete locale):
-```bash
-curl http://192.168.1.50:11434/api/tags
-```
-
-### Problemi comuni
-| Problema | Causa |
-|---|---|
-| Risposte molto lente | RAM insufficiente per il modello scelto (vedi tabella modelli sotto) |
-| `ollama: command not found` | PATH non aggiornato, riapri la sessione |
-| Non raggiungibile da altri dispositivi | `OLLAMA_HOST` non configurato, o firewall blocca la porta 11434 |
-
-### Come risolverli
-```bash
-free -h
-ollama pull llama3.2:3b   # modello più leggero
-sudo ufw allow 11434/tcp
-```
-
-### Modelli consigliati in base alla RAM
-
-| RAM disponibile | Modello consigliato | Comando |
-|---|---|---|
-| 8 GB | `llama3.2:3b` o `phi3:mini` | `ollama pull llama3.2:3b` |
-| 16 GB | `llama3.1:8b` o `mistral:7b` | `ollama pull llama3.1:8b` |
-| 32 GB (senza GPU dedicata) | `qwen2.5:14b` | `ollama pull qwen2.5:14b` |
-| 32 GB + GPU 12GB+ VRAM | `qwen2.5:32b` | `ollama pull qwen2.5:32b` |
-
-### Cosa fare dopo
-Procedi alla Fase 10.
-
----
-
-## Fase 10 — Interfaccia AI (Open WebUI)
-
-### Obiettivo
-Interfaccia web per parlare con i modelli AI, raggiungibile da qualsiasi dispositivo della rete locale.
-
-### Cosa fare
-Installa Open WebUI via Docker Compose, collegato a Ollama.
-
-### Comandi
-```bash
-mkdir -p /data/docker/open-webui
-cd /data/docker/open-webui
-```
-
-Crea `docker-compose.yml`:
-```yaml
-version: "3.8"
-services:
-  open-webui:
-    image: ghcr.io/open-webui/open-webui:main
-    container_name: brainos-openwebui
-    ports:
-      - "3000:8080"
-    volumes:
-      - /data/brain/cache/open-webui:/app/backend/data
-    environment:
-      - OLLAMA_BASE_URL=http://host.docker.internal:11434
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    restart: unless-stopped
-```
-
-Avvia:
-```bash
-docker compose up -d
-```
-
-### Configurazione
-Apri il browser (da qualsiasi PC della rete) su:
-```
-http://192.168.1.50:3000
-```
-Crea l'account amministratore locale (resta solo sul tuo PC).
-
-### Verifica
-- [ ] La pagina di login di Open WebUI si apre correttamente
-- [ ] Il modello Ollama scaricato è visibile e selezionabile
-- [ ] Una domanda di prova riceve una risposta coerente
-- [ ] Accesso verificato anche da un secondo dispositivo (altro PC o telefono) sulla stessa rete Wi-Fi
-
-### Problemi comuni
-| Problema | Causa |
-|---|---|
-| Open WebUI non trova nessun modello | `OLLAMA_BASE_URL` errato, o Ollama non configurato su `0.0.0.0` (Fase 9) |
-| Pagina bianca o errore 502 | Il container ha impiegato più tempo del previsto ad avviarsi |
-
-### Come risolverli
-```bash
-docker logs brainos-openwebui
-docker exec -it brainos-openwebui curl http://host.docker.internal:11434/api/tags
-```
-
-### Cosa fare dopo
-Procedi alla Fase 11.
-
----
-
-## Fase 11 — Vault Obsidian (versione locale)
-
-### Obiettivo
-Collegare Obsidian al vault. In questa versione domestica, senza sincronizzazione multi-dispositivo avanzata: il vault è già versionato in Git dalla Fase 6, il che è sufficiente per iniziare.
-
-### Cosa fare
-Scegli in base a dove si trova Obsidian rispetto al vault:
-
-- **Stesso PC**: apri Obsidian direttamente sulla cartella `/data/brain/vault`.
-- **Altro PC della rete**: condividi `/data/brain/vault` come cartella di rete (SMB/Samba), oppure clona il repository Git locale su quel PC.
-
-### Comandi
-Se usi un altro PC via Git (metodo consigliato, identico a quello usato in `Claude-02.md`, Fase 11):
-```bash
-mkdir -p /data/git/brain.git
-cd /data/git/brain.git
-git init --bare
-```
-Sul PC client:
-```bash
-git clone ssh://brainadmin@192.168.1.50/data/git/brain.git ~/BrainVault
-```
-Collega il vault del server come remoto:
-```bash
-cd /data/brain/vault
-git remote add origin /data/git/brain.git
-git push origin main
-```
-
-### Configurazione
-Apri Obsidian e scegli **"Apri cartella come vault"**, puntando a `/data/brain/vault` (stesso PC) oppure a `~/BrainVault` (PC client).
-
-### Verifica
-- [ ] Il vault è visibile e navigabile in Obsidian
-- [ ] Se usi più dispositivi: una modifica fatta su un client, dopo `git push`, è visibile con `git pull` sul server
-
-### Problemi comuni
-| Problema | Causa |
-|---|---|
-| `git push` chiede la password ogni volta | Nessuna chiave SSH configurata |
-| Conflitti di merge tra client e server | Modifiche parallele senza sincronizzare prima |
-
-### Come risolverli
-```bash
-ssh-keygen -t ed25519 -C "brain-client"
-ssh-copy-id brainadmin@192.168.1.50
-```
-Fai sempre `git pull` prima di iniziare a scrivere.
-
-> Se in futuro vorrai sincronizzare **più di due dispositivi** in modo robusto, la sezione completa (con Nextcloud/Obsidian Sync come alternative) è già pronta in `Claude-02.md`, Fase 11 — stessi path, nessuna modifica necessaria.
-
-### Cosa fare dopo
-Procedi alla Fase 14 per i test.
-
----
-
-## Fase 14 — Test end-to-end (versione ridotta)
-
-### Obiettivo
-Verificare che i componenti installati in questa versione domestica funzionino correttamente insieme.
-
-### Comandi / Verifica
-1. **Test Docker**:
-```bash
-docker ps
-```
-2. **Test Ollama**:
-```bash
-ollama list
-```
-3. **Test Open WebUI**: apri `http://192.168.1.50:3000` e invia una domanda di prova.
-4. **Test vault Git** (se usi più dispositivi): modifica un file, `git push`, poi verifica con `git log` sul server.
-
-> I test relativi a PostgreSQL, ChromaDB, VPN e reverse proxy non si applicano finché non attivi le Fasi 7, 8, 12 e 13 da `Claude-02.md`.
-
-### Problemi comuni
-Vedi le tabelle "Problemi comuni" di ciascuna Fase precedente.
-
-### Come risolverli
-Ripercorri la Fase corrispondente al componente che fallisce, controllando i log con `docker logs <nome-container>`.
-
-### Cosa fare dopo
-Procedi alla Fase 15 per il backup.
-
----
-
-## Fase 15 — Backup
-
-### Obiettivo
-Proteggere il Brain — questa parte **non va mai saltata**, indipendentemente dalla scala del sistema. Identica a `Claude-02.md`.
-
-### Comandi
-Crea lo script:
-```bash
-sudo nano /data/docker/backup.sh
-```
-Contenuto:
-```bash
-#!/bin/bash
-set -e
-
-DATA=$(date +%Y-%m-%d_%H-%M)
-SORGENTE=/data/brain
-DESTINAZIONE=/data/backups/brain_backup_$DATA.tar.gz
-
-tar -czf $DESTINAZIONE $SORGENTE
-
-# Mantieni solo gli ultimi 14 backup
-ls -1t /data/backups/brain_backup_*.tar.gz | tail -n +15 | xargs -r rm
-
-echo "Backup completato: $DESTINAZIONE"
-```
-Rendilo eseguibile:
-```bash
-chmod +x /data/docker/backup.sh
-```
-
-### Configurazione
-Pianifica l'esecuzione giornaliera con `cron` (es. ogni notte alle 3:00):
-```bash
-crontab -e
-```
-Aggiungi:
+Aggiungi una riga:
 ```text
-0 3 * * * /data/docker/backup.sh >> /data/backups/backup.log 2>&1
+mp0: /mnt/nas-ssd,mp=/mnt/nas-data
+```
+Riavvia l'LXC dalla Web UI.
+
+Dentro l'LXC, installa Samba:
+```bash
+apt update
+apt install -y samba
+```
+
+Configura la condivisione:
+```bash
+nano /etc/samba/smb.conf
+```
+Aggiungi in fondo:
+```ini
+[Foto-Video]
+   path = /mnt/nas-data
+   browseable = yes
+   writable = yes
+   guest ok = no
+   valid users = tuoutente
+```
+
+Crea l'utente Samba e riavvia il servizio:
+```bash
+useradd -m tuoutente
+smbpasswd -a tuoutente
+systemctl restart smbd
 ```
 
 ### Verifica
-```bash
-/data/docker/backup.sh
-ls -la /data/backups/
+Da un PC/telefono sulla stessa rete, apri Esplora File (Windows) o Finder (macOS) e cerca la condivisione:
 ```
+\\192.168.1.52\Foto-Video     (Windows)
+smb://192.168.1.52/Foto-Video (macOS/Linux)
+```
+Inserisci le credenziali create sopra e verifica di poter copiare un file di prova.
 
 ### Problemi comuni
 | Problema | Causa |
 |---|---|
-| Lo script cron non si esegue | Percorso errato nel crontab, o permessi di esecuzione mancanti |
-| Il backup cresce troppo nel tempo | Nessuna rotazione configurata (già inclusa nello script sopra) |
+| La cartella condivisa non appare | Servizio Samba non attivo, o firewall dell'LXC blocca le porte 445/139 |
+| I file scritti non persistono dopo un riavvio dell'LXC | Il bind mount non è stato configurato correttamente nel file `.conf` del container |
 
 ### Come risolverli
 ```bash
-grep CRON /var/log/syslog
-ls -la /data/docker/backup.sh
+systemctl status smbd
 ```
+Verifica che `mp0` compaia nella configurazione del container (`cat /etc/pve/lxc/<ID>.conf` dall'host) e che `df -h /mnt/nas-data` dentro l'LXC mostri lo spazio reale dell'SSD esterno, non lo spazio del disco di sistema dell'LXC.
 
-12.3. **Copia periodicamente** la cartella `/data/backups` anche su una chiavetta USB o un hard disk esterno, per avere una seconda copia fisica separata dal PC (regola delle tre copie).
+> 💡 Se in futuro vorrai funzionalità NAS più serie (RAID, snapshot ZFS, ridondanza contro dischi guasti), questo LXC leggero può essere sostituito con una VM dedicata **TrueNAS Scale**, mantenendo lo stesso ruolo nella rete (stesso IP, stessa condivisione) — è un aggiornamento indipendente da tutto il resto dell'homelab.
 
 ### Cosa fare dopo
-A questo punto hai un Second Brain domestico funzionante. Per i prossimi passi, vai direttamente in `Claude-02.md` alle Fasi che ti interessano:
+Procedi alla Fase 8 per l'accesso da remoto.
 
-- **Vuoi accedere anche da fuori casa?** → Fase 12 (VPN con Tailscale)
-- **Vuoi ricerca semantica sul vault?** → Fasi 7-8 (Postgres + ChromaDB)
-- **Vuoi nomi tipo `brain.local` invece dell'IP?** → Fase 5 (DNS locale) e Fase 13 (reverse proxy)
-- **Vuoi mantenere il sistema aggiornato nel tempo?** → Fase 16
-- **Vuoi automazioni intelligenti (Brain Keeper)?** → Fase 17
+---
 
-In tutti i casi, i path (`/data/brain/...`, `/data/docker/...`) e i nomi dei container (`brainos-*`) sono già gli stessi: non serve alcuna migrazione, solo continuare da dove questa guida si è fermata.
+## Fase 8 — VPN centralizzata (Tailscale sull'host Proxmox)
+
+### Obiettivo
+Poter raggiungere sia BrainOS (VM) sia il NAS (LXC) da fuori casa, con un'unica VPN, senza dover configurare Tailscale separatamente su ogni VM/LXC.
+
+### Cosa fare
+Installa Tailscale **sull'host Proxmox** e attivalo come "subnet router": in questo modo un solo punto di ingresso VPN dà accesso a tutta la rete interna (`192.168.1.0/24`), comprese le VM e gli LXC attuali e quelli che aggiungerai in futuro.
+
+### Comandi
+Sull'host Proxmox:
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up --advertise-routes=192.168.1.0/24
+```
+Il comando restituisce un link: aprilo in un browser, autenticati con il tuo account Tailscale e autorizza il dispositivo.
+
+### Configurazione
+1. Sul pannello di amministrazione di Tailscale (`login.tailscale.com/admin/machines`), trova la macchina `pve-home` e **approva la route annunciata** (`192.168.1.0/24`) — è un passaggio manuale di sicurezza, non avviene automaticamente.
+2. Sui dispositivi client (telefono, laptop), installa l'app Tailscale e accedi con lo stesso account.
+3. (Opzionale ma consigliato) Attiva "Use Tailscale subnets" nelle impostazioni del client, se non è già automatico.
+
+### Verifica
+Da un dispositivo **fuori dalla rete di casa** (es. telefono con dati mobili, Tailscale attivo):
+```
+http://192.168.1.51:3000        → Open WebUI (BrainOS)
+smb://192.168.1.52/Foto-Video   → NAS
+```
+Devono essere raggiungibili esattamente come se fossi in LAN, grazie al subnet routing.
+
+### Problemi comuni
+| Problema | Causa |
+|---|---|
+| Il dispositivo remoto non raggiunge le VM/LXC, solo l'host Proxmox | La route `192.168.1.0/24` non è stata approvata nel pannello admin di Tailscale |
+| Connessione lenta | Tailscale sta passando da un relay invece che diretta (succede dietro NAT complessi) |
+
+### Come risolverli
+```bash
+tailscale status
+tailscale ping 192.168.1.51
+```
+Controlla nel pannello admin che la route sia contrassegnata come "Approved", non solo "Advertised".
+
+> 💡 In alternativa, potresti installare Tailscale separatamente dentro la VM `brainos` e l'LXC `nas` invece che sull'host — più isolato (l'host Proxmox stesso non è raggiungibile da VPN) ma richiede configurarlo più volte. Il subnet routing sull'host resta la soluzione più comoda per un homelab in crescita, perché ogni nuova VM/LXC futura sarà automaticamente raggiungibile senza toccare di nuovo la configurazione VPN.
+
+### Cosa fare dopo
+Procedi alla Fase 9 per il backup.
+
+---
+
+## Fase 9 — Backup (VM/LXC + dati NAS)
+
+### Obiettivo
+Proteggere sia BrainOS sia i dati del NAS, sfruttando le funzionalità di backup native di Proxmox oltre allo script già usato dentro la VM.
+
+### Cosa fare
+1. Configura backup automatici **a livello di VM/LXC** direttamente da Proxmox (snapshot dell'intera macchina, non solo dei file).
+2. Mantieni comunque il backup interno del vault (`Claude-02.md`, Fase 15), eseguito dentro la VM: sono due livelli complementari, non alternativi.
+
+### Configurazione (Web UI Proxmox)
+1. **Datacenter → Backup → Add**.
+2. Storage di destinazione: lo storage `/mnt/nas-ssd` registrato in Fase 3 (o, meglio, un secondo disco esterno dedicato solo ai backup, se ne hai uno — non conviene backuppare le VM sullo stesso SSD dove giri anche il NAS in produzione).
+3. Seleziona le VM/LXC da includere: `brainos` e `nas`.
+4. Pianificazione: es. ogni notte alle 3:00.
+5. Retention: mantieni, ad esempio, gli ultimi 7 backup giornalieri.
+
+### Verifica
+Dopo la prima esecuzione pianificata (o forzandola manualmente da **Backup → Run now**):
+```bash
+ls -la /mnt/nas-ssd/dump/
+```
+Dovresti vedere i file di backup delle VM/LXC.
+
+### Problemi comuni
+| Problema | Causa |
+|---|---|
+| Il backup fallisce per spazio esaurito | Lo storage di destinazione è troppo piccolo per contenere backup di VM + dati NAS insieme |
+| Il backup è molto lento | Backup "full" ogni volta invece che incrementale; valuta il formato `zstd` con compressione e, se disponibile, backup mode "snapshot" invece di "stop" |
+
+### Come risolverli
+Se possibile, usa un disco separato solo per i backup Proxmox, distinto sia dal disco di sistema sia dall'SSD dati del NAS — è la vera "regola delle tre copie" applicata a un homelab con Proxmox: dati live, backup locale su disco separato, e idealmente una terza copia offsite (cloud cifrato o disco portato fisicamente altrove).
+
+### Cosa fare dopo
+A questo punto hai: Proxmox come base, BrainOS isolato in una VM dedicata (pronta per tutte le Fasi avanzate di `Claude-02.md`), un NAS leggero per foto/video su SSD esterno, accesso VPN unificato a tutto tramite Tailscale, e backup sia a livello di VM sia a livello di vault. Da qui puoi aggiungere altre VM/LXC in futuro (Home Assistant, altri esperimenti) senza toccare nulla di quanto già costruito.
 
 ---
 
 ## Checklist finale
 
-- [ ] Ubuntu installato e funzionante (Fase 1)
-- [ ] `/data` montato in modo persistente, struttura cartelle creata (Fase 3)
-- [ ] Docker installato e funzionante (Fase 4)
-- [ ] IP del PC reso stabile tramite riserva DHCP (Fase 5)
-- [ ] Struttura completa del vault creata in `/data/brain/vault` (`Projects/`, `Knowledge/`, ecc.), con `AGENTS.md` e Git inizializzato (Fase 6)
-- [ ] Ollama installato e almeno un modello scaricato (Fase 9)
-- [ ] Open WebUI avviato e raggiungibile su `http://<ip-server>:3000` (Fase 10)
-- [ ] Obsidian collegato al vault (Fase 11)
-- [ ] Test end-to-end superati (Fase 14)
-- [ ] Script di backup creato, testato e pianificato via cron (Fase 15)
-- [ ] Copia di backup salvata anche su un supporto esterno
+- [ ] Proxmox VE installato e Web UI raggiungibile
+- [ ] SSD esterno collegato e riconosciuto come storage separato
+- [ ] Deciso e creato: VM dedicata `brainos` (Ubuntu Server + Docker)
+- [ ] Dentro la VM, seguite le Fasi rilevanti di `Claude-02.md` (storage, Docker, vault, Ollama, Open WebUI)
+- [ ] IP statici assegnati a host, VM brainos e LXC nas
+- [ ] LXC `nas` creato, SSD esterno montato via bind mount, condivisione Samba funzionante
+- [ ] Tailscale installato sull'host Proxmox, route `192.168.1.0/24` approvata
+- [ ] Accesso verificato da un dispositivo fuori casa (VPN) sia a Open WebUI sia al NAS
+- [ ] Backup Proxmox configurato per VM e LXC, su storage separato da quello di produzione
+- [ ] Backup interno del vault (script + cron dentro la VM) ancora attivo
 
 ---
 
-> 🎯 **Risultato finale di questa guida**: un Second Brain funzionante, interamente locale, con AI tramite Ollama e Open WebUI, vault Obsidian versionato in Git e backup automatico — costruito sulla stessa identica base (`/data`, Docker, nomi dei container) della versione completa in `Claude-02.md`, pronto per essere esteso senza modifiche quando vorrai aggiungere VPN, database o ricerca semantica.
+> 🎯 **Risultato di questa guida**: un homelab basato su Proxmox, pronto a crescere: BrainOS isolato in una VM dedicata (compatibile al 100% con `Claude-02.md`), un piccolo NAS su SSD esterno per foto e video, e accesso remoto unificato via Tailscale a tutti i servizi presenti e futuri.
